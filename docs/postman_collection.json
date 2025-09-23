@@ -1,0 +1,368 @@
+{
+   "info": {
+      "name": "GiaoHangDaNang API",
+      "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+   },
+   "item": [
+      {
+         "name": "Auth",
+         "item": [
+            {
+               "name": "Register",
+               "request": {
+                  "method": "POST",
+                  "header": [
+                     {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                     }
+                  ],
+                  "url": {
+                     "raw": "{{baseUrl}}/auth/register",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "auth",
+                        "register"
+                     ]
+                  },
+                  "body": {
+                     "mode": "raw",
+                     "raw": "{\n  \"name\": \"User A\",\n  \"phone\": \"0900000001\",\n  \"password\": \"secret123\",\n  \"role\": \"Customer\"\n}"
+                  }
+               }
+            },
+            {
+               "name": "Login",
+               "event": [
+                  {
+                     "listen": "test",
+                     "script": {
+                        "exec": [
+                           "const d = (pm.response.json()||{}).data||{};",
+                           "pm.environment.set('accessToken', d.accessToken||'');"
+                        ],
+                        "type": "text/javascript"
+                     }
+                  }
+               ],
+               "request": {
+                  "method": "POST",
+                  "header": [
+                     {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                     }
+                  ],
+                  "url": {
+                     "raw": "{{baseUrl}}/auth/login",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "auth",
+                        "login"
+                     ]
+                  },
+                  "body": {
+                     "mode": "raw",
+                     "raw": "{\n  \"phone\": \"0900000001\",\n  \"password\": \"secret123\"\n}"
+                  }
+               }
+            },
+            {
+               "name": "Me",
+               "request": {
+                  "method": "GET",
+                  "header": [
+                     {
+                        "key": "Authorization",
+                        "value": "Bearer {{accessToken}}"
+                     }
+                  ],
+                  "url": {
+                     "raw": "{{baseUrl}}/auth/me",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "auth",
+                        "me"
+                     ]
+                  }
+               }
+            }
+         ]
+      },
+      {
+         "name": "Profile",
+         "item": [
+            {
+               "name": "Get My Profile",
+               "request": {
+                  "method": "GET",
+                  "header": [
+                     {
+                        "key": "Authorization",
+                        "value": "Bearer {{accessToken}}"
+                     }
+                  ],
+                  "url": {
+                     "raw": "{{baseUrl}}/profile/me",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "profile",
+                        "me"
+                     ]
+                  }
+               }
+            },
+            {
+               "name": "Update My Profile",
+               "request": {
+                  "method": "PUT",
+                  "header": [
+                     {
+                        "key": "Authorization",
+                        "value": "Bearer {{accessToken}}"
+                     },
+                     {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                     }
+                  ],
+                  "url": {
+                     "raw": "{{baseUrl}}/profile/me",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "profile",
+                        "me"
+                     ]
+                  },
+                  "body": {
+                     "mode": "raw",
+                     "raw": "{\n  \"name\": \"Tester Updated\",\n  \"address\": \"Đà Nẵng\"\n}"
+                  }
+               }
+            }
+         ]
+      },
+      {
+         "name": "Vehicles",
+         "item": [
+            {
+               "name": "List Vehicles",
+               "request": {
+                  "method": "GET",
+                  "url": {
+                     "raw": "{{baseUrl}}/vehicles?type=TruckSmall&weightKg=1500",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "vehicles"
+                     ],
+                     "query": [
+                        {
+                           "key": "type",
+                           "value": "TruckSmall"
+                        },
+                        {
+                           "key": "weightKg",
+                           "value": "1500"
+                        }
+                     ]
+                  }
+               }
+            }
+         ]
+      },
+      {
+         "name": "Orders",
+         "item": [
+            {
+               "name": "Create Order (Multi-Items)",
+               "request": {
+                  "method": "POST",
+                  "header": [
+                     {
+                        "key": "Authorization",
+                        "value": "Bearer {{accessToken}}"
+                     },
+                     {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                     }
+                  ],
+                  "url": {
+                     "raw": "{{baseUrl}}/orders",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "orders"
+                     ]
+                  },
+                  "body": {
+                     "mode": "raw",
+                     "raw": "{\n  \"pickupAddress\": \"Số 1, Hải Châu\",\n  \"dropoffAddress\": \"Số 2, Liên Chiểu\",\n  \"items\": [\n    { \"vehicleType\":\"TruckSmall\",\"weightKg\":800,\"distanceKm\":12.5,\"loadingService\":true,\"insurance\":true },\n    { \"vehicleType\":\"TruckMedium\",\"weightKg\":3000,\"distanceKm\":7.2,\"loadingService\":false,\"insurance\":false }\n  ]\n}"
+                  }
+               }
+            },
+            {
+               "name": "Driver Online",
+               "request": {
+                  "method": "PUT",
+                  "header": [
+                     {
+                        "key": "Authorization",
+                        "value": "Bearer {{accessToken}}"
+                     },
+                     {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                     }
+                  ],
+                  "url": {
+                     "raw": "{{baseUrl}}/orders/driver/online",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "orders",
+                        "driver",
+                        "online"
+                     ]
+                  },
+                  "body": {
+                     "mode": "raw",
+                     "raw": "{\n  \"online\": true\n}"
+                  }
+               }
+            },
+            {
+               "name": "Accept Order Item",
+               "request": {
+                  "method": "PUT",
+                  "header": [
+                     {
+                        "key": "Authorization",
+                        "value": "Bearer {{accessToken}}"
+                     }
+                  ],
+                  "url": {
+                     "raw": "{{baseUrl}}/orders/:orderId/items/:itemId/accept",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "orders",
+                        ":orderId",
+                        "items",
+                        ":itemId",
+                        "accept"
+                     ]
+                  }
+               }
+            },
+            {
+               "name": "Update Order Item Status",
+               "request": {
+                  "method": "PUT",
+                  "header": [
+                     {
+                        "key": "Authorization",
+                        "value": "Bearer {{accessToken}}"
+                     },
+                     {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                     }
+                  ],
+                  "url": {
+                     "raw": "{{baseUrl}}/orders/:orderId/items/:itemId/status",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "orders",
+                        ":orderId",
+                        "items",
+                        ":itemId",
+                        "status"
+                     ]
+                  },
+                  "body": {
+                     "mode": "raw",
+                     "raw": "{\n  \"status\": \"PickedUp\"\n}"
+                  }
+               }
+            }
+         ]
+      },
+      {
+         "name": "Admin",
+         "item": [
+            {
+               "name": "List Users",
+               "request": {
+                  "method": "GET",
+                  "header": [
+                     {
+                        "key": "Authorization",
+                        "value": "Bearer {{accessToken}}"
+                     }
+                  ],
+                  "url": {
+                     "raw": "{{baseUrl}}/admin/users?role=Driver&search=van&page=1&limit=20&sort=createdAt:desc",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "admin",
+                        "users"
+                     ],
+                     "query": [
+                        {
+                           "key": "role",
+                           "value": "Driver"
+                        },
+                        {
+                           "key": "search",
+                           "value": "van"
+                        },
+                        {
+                           "key": "page",
+                           "value": "1"
+                        },
+                        {
+                           "key": "limit",
+                           "value": "20"
+                        },
+                        {
+                           "key": "sort",
+                           "value": "createdAt:desc"
+                        }
+                     ]
+                  }
+               }
+            }
+         ]
+      }
+   ],
+   "variable": [
+      {
+         "key": "baseUrl",
+         "value": "http://localhost:8080/api"
+      },
+      {
+         "key": "accessToken",
+         "value": ""
+      }
+   ]
+}
