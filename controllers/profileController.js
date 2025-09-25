@@ -1,130 +1,142 @@
-import cloudinary from '../config/cloudinary.js';
 import User from '../models/user.model.js';
 import Driver from '../models/driver.model.js';
-import Vehicle from '../models/vehicle.model.js';
+import cloudinary from '../config/cloudinary.js';
 
-const uploadToCloudinary = async (buffer, folder) => {
-   return new Promise((resolve, reject) => {
-      const stream = cloudinary.uploader.upload_stream({ folder }, (err, result) => {
-         if (err) return reject(err);
-         resolve(result);
-      });
-      stream.end(buffer);
-   });
-};
+const uploadStream = (buffer, folder) => new Promise((resolve, reject) => {
+   const s = cloudinary.uploader.upload_stream({ folder }, (err, result) => err ? reject(err) : resolve(result));
+   s.end(buffer);
+});
 
-// USER PROFILE CRUD
-export const getMyProfile = async (req, res) => {
-   const user = await User.findById(req.user._id).select('-passwordHash -refreshToken');
-   return res.json({ success: true, data: user });
-};
-
-export const updateMyProfile = async (req, res) => {
-   const { name, address } = req.body;
-   const update = {};
-   if (name) update.name = name;
-   if (address) update.address = address;
-   const user = await User.findByIdAndUpdate(req.user._id, { $set: update }, { new: true }).select('-passwordHash -refreshToken');
-   return res.json({ success: true, data: user });
-};
-
-export const uploadMyAvatar = async (req, res) => {
+// Lấy thông tin profile của người dùng hiện tại
+export const getProfile = async (req, res) => {
    try {
-      if (!req.file) return res.status(400).json({ success: false, message: 'Thiếu file' });
-      const result = await uploadToCloudinary(req.file.buffer, 'profiles/users');
-      const user = await User.findByIdAndUpdate(req.user._id, { $set: { avatarUrl: result.secure_url } }, { new: true }).select('-passwordHash -refreshToken');
+      const userId = req.user._id;
+      const user = await User.findById(userId).select('-passwordHash');
+
+      if (!user) {
+         return res.status(404).json({ success: false, message: 'Không tìm thấy người dùng' });
+      }
+
       return res.json({ success: true, data: user });
    } catch (error) {
-      return res.status(500).json({ success: false, message: 'Lỗi upload ảnh', error: error.message });
+      return res.status(500).json({ success: false, message: 'Lỗi khi lấy thông tin profile', error: error.message });
    }
 };
 
-// DRIVER PROFILE CRUD
-export const getMyDriverProfile = async (req, res) => {
-   const driver = await Driver.findOne({ userId: req.user._id }).populate('vehicleId');
-   return res.json({ success: true, data: driver });
-};
-
-export const upsertMyDriverProfile = async (req, res) => {
-   const { status } = req.body;
-   const driver = await Driver.findOneAndUpdate(
-      { userId: req.user._id },
-      { $set: { status } },
-      { upsert: true, new: true }
-   );
-   return res.json({ success: true, data: driver });
-};
-
-export const uploadMyDriverAvatar = async (req, res) => {
+// Cập nhật thông tin profile
+export const updateProfile = async (req, res) => {
    try {
-      if (!req.file) return res.status(400).json({ success: false, message: 'Thiếu file' });
-      const result = await uploadToCloudinary(req.file.buffer, 'profiles/drivers');
-      const driver = await Driver.findOneAndUpdate(
-         { userId: req.user._id },
-         { $set: { avatarUrl: result.secure_url } },
-         { upsert: true, new: true }
-      );
+      const userId = req.user._id;
+      const { name, phone, address } = req.body;
+
+      // Kiểm tra dữ liệu đầu vào
+      if (!name) {
+         return res.status(400).json({ success: false, message: 'Tên không được để trống' });
+      }
+
+      // Cập nhật thông tin
+      const updatedUser = await User.findByIdAndUpdate(
+         userId,
+         { $set: { name, phone, address } },
+         { new: true }
+      ).select('-passwordHash');
+
+      if (!updatedUser) {
+         return res.status(404).json({ success: false, message: 'Không tìm thấy người dùng' });
+      }
+
+      return res.json({ success: true, data: updatedUser, message: 'Cập nhật thông tin thành công' });
+   } catch (error) {
+      return res.status(500).json({ success: false, message: 'Lỗi khi cập nhật thông tin profile', error: error.message });
+   }
+};
+
+// Upload avatar
+export const uploadAvatar = async (req, res) => {
+   try {
+      const userId = req.user._id;
+
+      // Kiểm tra dữ liệu đầu vào
+      const { avatarUrl } = req.body;
+
+      if (!avatarUrl) {
+         return res.status(400).json({ success: false, message: 'URL avatar không được để trống' });
+      }
+
+      // Cập nhật URL avatar trong database
+      const updatedUser = await User.findByIdAndUpdate(
+         userId,
+         { $set: { avatarUrl } },
+         { new: true }
+      ).select('-passwordHash');
+
+      if (!updatedUser) {
+         return res.status(404).json({ success: false, message: 'Không tìm thấy người dùng' });
+      }
+
+      // Nếu là tài xế, cập nhật cả trong bảng Driver
+      if (req.user.role === 'Driver' || (Array.isArray(req.user.roles) && req.user.roles.includes('Driver'))) {
+         await Driver.findOneAndUpdate(
+            { userId },
+            { $set: { avatarUrl } }
+         );
+      }
+
+      return res.json({
+         success: true,
+         data: { avatarUrl, user: updatedUser },
+         message: 'Cập nhật avatar thành công'
+      });
+   } catch (error) {
+      return res.status(500).json({ success: false, message: 'Lỗi khi cập nhật avatar', error: error.message });
+   }
+};
+
+// Lấy thông tin profile tài xế (bao gồm cả thông tin user)
+export const getDriverProfile = async (req, res) => {
+   try {
+      const userId = req.user._id;
+
+      // Lấy thông tin tài xế
+      const driver = await Driver.findOne({ userId }).populate('userId', '-passwordHash');
+
+      if (!driver) {
+         return res.status(404).json({ success: false, message: 'Không tìm thấy thông tin tài xế' });
+      }
+
       return res.json({ success: true, data: driver });
    } catch (error) {
-      return res.status(500).json({ success: false, message: 'Lỗi upload ảnh', error: error.message });
+      return res.status(500).json({ success: false, message: 'Lỗi khi lấy thông tin tài xế', error: error.message });
    }
 };
 
-// VEHICLE CRUD (driver)
-export const upsertMyVehicle = async (req, res) => {
-   const { type, licensePlate } = req.body;
-   let driver = await Driver.findOne({ userId: req.user._id });
-   if (!driver) driver = await Driver.create({ userId: req.user._id });
-
-   let vehicle = await Vehicle.findOneAndUpdate(
-      { driverId: driver._id },
-      { $set: { type, licensePlate } },
-      { upsert: true, new: true }
-   );
-
-   // Liên kết vào driver
-   if (!driver.vehicleId || String(driver.vehicleId) !== String(vehicle._id)) {
-      driver.vehicleId = vehicle._id;
-      await driver.save();
-   }
-
-   return res.json({ success: true, data: vehicle });
-};
-
-export const uploadMyVehiclePhoto = async (req, res) => {
+// Cập nhật khu vực hoạt động của tài xế
+export const updateServiceAreas = async (req, res) => {
    try {
-      if (!req.file) return res.status(400).json({ success: false, message: 'Thiếu file' });
-      const result = await uploadToCloudinary(req.file.buffer, 'profiles/vehicles');
-      const driver = await Driver.findOne({ userId: req.user._id });
-      if (!driver) return res.status(404).json({ success: false, message: 'Chưa có hồ sơ tài xế' });
-      const vehicle = await Vehicle.findOneAndUpdate(
-         { driverId: driver._id },
-         { $set: { photoUrl: result.secure_url } },
-         { upsert: true, new: true }
+      const userId = req.user._id;
+      const { serviceAreas } = req.body;
+
+      if (!Array.isArray(serviceAreas)) {
+         return res.status(400).json({ success: false, message: 'Dữ liệu không hợp lệ' });
+      }
+
+      // Cập nhật khu vực hoạt động
+      const updatedDriver = await Driver.findOneAndUpdate(
+         { userId },
+         { $set: { serviceAreas } },
+         { new: true }
       );
-      return res.json({ success: true, data: vehicle });
+
+      if (!updatedDriver) {
+         return res.status(404).json({ success: false, message: 'Không tìm thấy thông tin tài xế' });
+      }
+
+      return res.json({
+         success: true,
+         data: updatedDriver,
+         message: 'Cập nhật khu vực hoạt động thành công'
+      });
    } catch (error) {
-      return res.status(500).json({ success: false, message: 'Lỗi upload ảnh', error: error.message });
+      return res.status(500).json({ success: false, message: 'Lỗi khi cập nhật khu vực hoạt động', error: error.message });
    }
 };
-
-export const updateDriverServiceAreas = async (req, res) => {
-   try {
-      const { serviceAreas, isOnline } = req.body; // serviceAreas: string[] (tên quận/huyện)
-      const allowed = [
-         'Quận Cẩm Lệ', 'Quận Hải Châu', 'Quận Liên Chiểu', 'Quận Ngũ Hành Sơn',
-         'Quận Sơn Trà', 'Quận Thanh Khê', 'Huyện Hòa Vang', 'Huyện Hoàng Sa'
-      ];
-      const areas = Array.isArray(serviceAreas) ? serviceAreas.filter(a => allowed.includes(a)) : [];
-      const driver = await Driver.findOneAndUpdate(
-         { userId: req.user._id },
-         { $set: { serviceAreas: areas, ...(typeof isOnline === 'boolean' ? { isOnline, lastOnlineAt: new Date() } : {}) } },
-         { upsert: true, new: true }
-      );
-      return res.json({ success: true, data: driver });
-   } catch (error) {
-      return res.status(500).json({ success: false, message: 'Lỗi cập nhật phạm vi hoạt động', error: error.message });
-   }
-};
-
-
