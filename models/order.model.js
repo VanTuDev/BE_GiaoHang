@@ -14,18 +14,48 @@ const orderItemSchema = new mongoose.Schema({
       insuranceFee: Number,
       total: Number
    },
-   status: { type: String, enum: ["Created", "Accepted", "PickedUp", "Delivering", "Delivered", "Cancelled"], default: "Created" },
-   driverId: { type: mongoose.Schema.Types.ObjectId, ref: "Driver" }
-}, { _id: true });
+   status: {
+      type: String,
+      enum: ["Created", "Accepted", "PickedUp", "Delivering", "Delivered", "Cancelled"],
+      default: "Created"
+   },
+   driverId: { type: mongoose.Schema.Types.ObjectId, ref: "Driver" },
+   acceptedAt: { type: Date },
+   pickedUpAt: { type: Date },
+   deliveredAt: { type: Date },
+   cancelledAt: { type: Date },
+   cancelReason: { type: String },
+   itemPhotos: [String], // Hình ảnh đơn hàng
+}, { _id: true, timestamps: true });
 
 // Đơn hàng nhiều item
 const orderSchema = new mongoose.Schema({
    customerId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
    pickupAddress: { type: String, required: true },
+   pickupLocation: {
+      type: { type: String, enum: ['Point'], default: 'Point' },
+      coordinates: { type: [Number], default: [0, 0] } // [longitude, latitude]
+   },
    dropoffAddress: { type: String, required: true },
+   dropoffLocation: {
+      type: { type: String, enum: ['Point'], default: 'Point' },
+      coordinates: { type: [Number], default: [0, 0] } // [longitude, latitude]
+   },
    items: { type: [orderItemSchema], default: [] },
    totalPrice: { type: Number, default: 0 },
-   paymentId: { type: mongoose.Schema.Types.ObjectId, ref: "Payment" }
+   paymentId: { type: mongoose.Schema.Types.ObjectId, ref: "Payment" },
+   paymentStatus: { type: String, enum: ["Pending", "Paid", "Failed"], default: "Pending" },
+   paymentMethod: { type: String, enum: ["Cash", "Banking", "Wallet"], default: "Cash" },
+   customerNote: { type: String },
+   status: {
+      type: String,
+      enum: ["Created", "InProgress", "Completed", "Cancelled"],
+      default: "Created"
+   }
 }, { timestamps: true });
+
+// Tạo index cho vị trí để tìm kiếm dựa trên khoảng cách
+orderSchema.index({ pickupLocation: '2dsphere' });
+orderSchema.index({ dropoffLocation: '2dsphere' });
 
 export default mongoose.model("Order", orderSchema);

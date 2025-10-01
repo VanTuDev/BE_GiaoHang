@@ -1,17 +1,18 @@
-import mongoose from "mongoose";
+import mongoose from 'mongoose';
 
-// Lịch sử giao dịch tiền của tài xế
+// Giao dịch tài xế: thu nhập, hoa hồng, thanh toán
 const driverTransactionSchema = new mongoose.Schema({
-   driverId: { type: mongoose.Schema.Types.ObjectId, ref: "Driver", required: true },
-   orderId: { type: mongoose.Schema.Types.ObjectId, ref: "Order" }, // Liên quan cuốc xe nào
-   type: {
-      type: String,
-      enum: ["TripIncome", "AppFee", "Withdrawal", "Refund", "Adjustment"],
-      required: true
-   },
-   amount: { type: Number, required: true },        // Số tiền (+ thu nhập, - phí/rút tiền)
-   balanceAfter: { type: Number, required: true },  // Số dư sau giao dịch
-   description: String,                             // Ghi chú: "Thu nhập từ đơn X", "Phí 10% app"...
+   driverId: { type: mongoose.Schema.Types.ObjectId, ref: 'Driver', required: true, index: true },
+   orderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Order' },
+   orderItemId: { type: mongoose.Schema.Types.ObjectId },
+   amount: { type: Number, required: true }, // Số tiền giao dịch (VND)
+   fee: { type: Number, required: true }, // Phí hoa hồng (VND)
+   netAmount: { type: Number, required: true }, // Số tiền thực nhận = amount - fee
+   type: { type: String, enum: ['OrderEarning', 'Withdrawal', 'Bonus', 'Penalty'], required: true },
+   status: { type: String, enum: ['Pending', 'Completed', 'Failed', 'Cancelled'], default: 'Completed' },
+   description: { type: String },
+   paymentMethod: { type: String },
+   transactionDate: { type: Date, default: Date.now }
 }, { timestamps: true });
 
-export default mongoose.model("DriverTransaction", driverTransactionSchema);
+export default mongoose.model('DriverTransaction', driverTransactionSchema);
