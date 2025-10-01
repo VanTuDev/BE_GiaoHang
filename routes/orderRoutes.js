@@ -8,7 +8,9 @@ import {
    getCustomerOrders,
    getDriverOrders,
    getOrderDetail,
-   getAvailableOrders
+   getAvailableOrders,
+   cancelOrder,
+   updateOrderInsurance
 } from '../controllers/orderController.js';
 
 const router = express.Router();
@@ -18,6 +20,12 @@ router.post('/', authenticate, authorize(roles.CUSTOMER), createOrder);
 
 // Customer lấy danh sách đơn
 router.get('/my-orders', authenticate, authorize(roles.CUSTOMER), getCustomerOrders);
+
+// Customer huỷ đơn hàng
+router.put('/:orderId/cancel', authenticate, authorize(roles.CUSTOMER), cancelOrder);
+
+// Customer cập nhật bảo hiểm đơn hàng
+router.put('/:orderId/insurance', authenticate, authorize(roles.CUSTOMER), updateOrderInsurance);
 
 // Driver bật/tắt online
 router.put('/driver/online', authenticate, authorize(roles.DRIVER), setDriverOnline);

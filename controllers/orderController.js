@@ -360,6 +360,166 @@ export const getAvailableOrders = async (req, res) => {
    }
 };
 
+// Customer huỷ đơn hàng
+export const cancelOrder = async (req, res) => {
+   try {
+      const { orderId } = req.params;
+      const { reason } = req.body;
+
+      const order = await Order.findById(orderId);
+      if (!order) {
+         return res.status(404).json({ success: false, message: 'Không tìm thấy đơn hàng' });
+      }
+
+      // Kiểm tra quyền huỷ đơn (chỉ customer sở hữu đơn mới được huỷ)
+      if (String(order.customerId) !== String(req.user._id)) {
+         return res.status(403).json({ success: false, message: 'Không có quyền huỷ đơn hàng này' });
+      }
+
+      // Kiểm tra trạng thái đơn hàng (chỉ cho phép huỷ đơn ở trạng thái Created hoặc InProgress)
+      if (!['Created', 'InProgress'].includes(order.status)) {
+         return res.status(400).json({
+            success: false,
+            message: 'Không thể huỷ đơn hàng ở trạng thái này'
+         });
+      }
+
+      // Kiểm tra các items đã được tài xế nhận chưa
+      const acceptedItems = order.items.filter(item =>
+         ['Accepted', 'PickedUp', 'Delivering'].includes(item.status)
+      );
+
+      if (acceptedItems.length > 0) {
+         return res.status(400).json({
+            success: false,
+            message: 'Không thể huỷ đơn hàng đã được tài xế nhận. Vui lòng liên hệ tài xế để huỷ.'
+         });
+      }
+
+      // Cập nhật trạng thái tất cả items thành Cancelled
+      const updatePromises = order.items.map(item => {
+         return Order.findOneAndUpdate(
+            { _id: orderId, 'items._id': item._id },
+            {
+               $set: {
+                  'items.$.status': 'Cancelled',
+                  'items.$.cancelledAt': new Date(),
+                  'items.$.cancelReason': reason || 'Khách hàng huỷ đơn'
+               }
+            }
+         );
+      });
+
+      await Promise.all(updatePromises);
+
+      // Cập nhật trạng thái đơn hàng tổng
+      await Order.findByIdAndUpdate(orderId, {
+         status: 'Cancelled',
+         customerNote: order.customerNote ?
+            `${order.customerNote}\n\nLý do huỷ: ${reason || 'Khách hàng huỷ đơn'}` :
+            `Lý do huỷ: ${reason || 'Khách hàng huỷ đơn'}`
+      });
+
+      const updatedOrder = await Order.findById(orderId);
+
+      return res.json({
+         success: true,
+         message: 'Huỷ đơn hàng thành công',
+         data: updatedOrder
+      });
+   } catch (error) {
+      return res.status(500).json({
+         success: false,
+         message: 'Lỗi huỷ đơn hàng',
+         error: error.message
+      });
+   }
+};
+
+// Customer cập nhật thông tin bảo hiểm cho đơn hàng
+export const updateOrderInsurance = async (req, res) => {
+   try {
+      const { orderId } = req.params;
+      const { itemId, insurance } = req.body;
+
+      const order = await Order.findById(orderId);
+      if (!order) {
+         return res.status(404).json({ success: false, message: 'Không tìm thấy đơn hàng' });
+      }
+
+      // Kiểm tra quyền cập nhật (chỉ customer sở hữu đơn)
+      if (String(order.customerId) !== String(req.user._id)) {
+         return res.status(403).json({ success: false, message: 'Không có quyền cập nhật đơn hàng này' });
+      }
+
+      // Kiểm tra trạng thái đơn hàng (chỉ cho phép cập nhật khi đơn ở trạng thái Created)
+      if (order.status !== 'Created') {
+         return res.status(400).json({
+            success: false,
+            message: 'Chỉ có thể cập nhật bảo hiểm khi đơn hàng ở trạng thái Created'
+         });
+      }
+
+      // Tìm item cần cập nhật
+      const item = order.items.find(item => String(item._id) === String(itemId));
+      if (!item) {
+         return res.status(404).json({ success: false, message: 'Không tìm thấy item trong đơn hàng' });
+      }
+
+      // Kiểm tra item chưa được tài xế nhận
+      if (item.status !== 'Created') {
+         return res.status(400).json({
+            success: false,
+            message: 'Không thể cập nhật bảo hiểm cho item đã được tài xế nhận'
+         });
+      }
+
+      // Tính lại giá với bảo hiểm mới
+      const insuranceFee = insurance ? 100000 : 0;
+      const loadingFee = item.loadingService ? 50000 : 0;
+      const breakdown = calcOrderPrice({
+         weightKg: item.weightKg,
+         distanceKm: item.distanceKm,
+         loadingService: item.loadingService,
+         loadingFee,
+         insuranceFee
+      });
+
+      // Cập nhật item
+      await Order.findOneAndUpdate(
+         { _id: orderId, 'items._id': itemId },
+         {
+            $set: {
+               'items.$.insurance': !!insurance,
+               'items.$.priceBreakdown': breakdown
+            }
+         }
+      );
+
+      // Tính lại tổng giá đơn hàng
+      const updatedOrder = await Order.findById(orderId);
+      const newTotalPrice = updatedOrder.items.reduce((total, item) => {
+         return total + (item.priceBreakdown?.total || 0);
+      }, 0);
+
+      await Order.findByIdAndUpdate(orderId, { totalPrice: newTotalPrice });
+
+      const finalOrder = await Order.findById(orderId);
+
+      return res.json({
+         success: true,
+         message: 'Cập nhật bảo hiểm thành công',
+         data: finalOrder
+      });
+   } catch (error) {
+      return res.status(500).json({
+         success: false,
+         message: 'Lỗi cập nhật bảo hiểm',
+         error: error.message
+      });
+   }
+};
+
 // Hàm helper để cập nhật trạng thái đơn hàng tổng
 async function updateOrderStatus(orderId) {
    try {

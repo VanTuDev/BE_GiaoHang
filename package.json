@@ -9,6 +9,7 @@
     "dev": "cross-env NODE_ENV=development nodemon index.js",
     "dev:env": "dotenv -e .env.development nodemon index.js",
     "prod": "cross-env NODE_ENV=production node index.js",
+    "build": "echo \"Backend không có bước build. Kiểm tra dependencies và cấu hình môi trường...\"",
     "test": "cross-env NODE_ENV=test echo \"Error: no test specified\" && exit 1",
     "setup:env": "node scripts/create-env.js",
     "dev:clean": "npm run setup:env && npm run dev:env",

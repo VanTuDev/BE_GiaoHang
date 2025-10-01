@@ -6,6 +6,8 @@ import vehicleRoutes from './vehicleRoutes.js';
 import orderRoutes from './orderRoutes.js';
 import driverOnboardingRoutes from './driverOnboardingRoutes.js';
 import uploadRoutes from './uploadRoutes.js';
+import feedbackRoutes from './feedbackRoutes.js';
+import violationRoutes from './violationRoutes.js';
 
 const router = express.Router();
 
@@ -17,5 +19,7 @@ router.use('/vehicles', vehicleRoutes);
 router.use('/orders', orderRoutes);
 router.use('/driver', driverOnboardingRoutes);
 router.use('/upload', uploadRoutes);
+router.use('/feedback', feedbackRoutes);
+router.use('/violations', violationRoutes);
 
 export default router;
