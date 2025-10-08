@@ -2,6 +2,7 @@ import User from '../models/user.model.js';
 import Driver from '../models/driver.model.js';
 import Order from '../models/order.model.js';
 import DriverTransaction from '../models/driverTransaction.model.js';
+import Vehicle from '../models/vehicle.model.js';
 
 // Lấy thống kê tổng quan
 export const getDashboardStats = async (req, res) => {
@@ -142,6 +143,55 @@ export const getDrivers = async (req, res) => {
       });
    } catch (error) {
       return res.status(500).json({ success: false, message: 'Lỗi lấy danh sách tài xế', error: error.message });
+   }
+};
+
+// Lấy đầy đủ thông tin theo userId (user + driver + vehicles + stats)
+export const getUserDetail = async (req, res) => {
+   try {
+      const { userId } = req.params;
+
+      const user = await User.findById(userId).select('-passwordHash');
+      if (!user) {
+         return res.status(404).json({ success: false, message: 'Không tìm thấy người dùng' });
+      }
+
+      // Nếu người dùng là tài xế (hoặc có hồ sơ tài xế) => lấy thêm thông tin
+      const driver = await Driver.findOne({ userId: user._id });
+      const vehicles = driver ? await Vehicle.find({ driverId: driver._id }) : [];
+
+      // Thống kê đơn hàng của user (với vai trò customer)
+      const orderStats = await Order.aggregate([
+         { $match: { customerId: user._id } },
+         { $group: { _id: '$status', count: { $sum: 1 } } }
+      ]);
+
+      // Thống kê liên quan đến driver (nếu có)
+      let driverStats = {};
+      if (driver) {
+         const itemStats = await Order.aggregate([
+            { $match: { 'items.driverId': driver._id } },
+            { $unwind: '$items' },
+            { $match: { 'items.driverId': driver._id } },
+            { $group: { _id: '$items.status', count: { $sum: 1 } } }
+         ]);
+         driverStats = itemStats.reduce((acc, c) => { acc[c._id] = c.count; return acc; }, {});
+      }
+
+      return res.json({
+         success: true,
+         data: {
+            user,
+            driver,
+            vehicles,
+            stats: {
+               orders: orderStats.reduce((acc, c) => { acc[c._id] = c.count; return acc; }, {}),
+               driver: driverStats
+            }
+         }
+      });
+   } catch (error) {
+      return res.status(500).json({ success: false, message: 'Lỗi lấy thông tin người dùng', error: error.message });
    }
 };
 

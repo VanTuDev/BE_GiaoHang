@@ -85,6 +85,7 @@ export const createFeedback = async (req, res) => {
 
       return res.status(201).json({ success: true, data: feedback });
    } catch (error) {
+      console.error('Error creating feedback:', error);
       return res.status(500).json({ success: false, message: 'Lỗi tạo đánh giá', error: error.message });
    }
 };
@@ -286,6 +287,28 @@ export const updateFeedbackStatus = async (req, res) => {
       return res.json({ success: true, data: feedback });
    } catch (error) {
       return res.status(500).json({ success: false, message: 'Lỗi cập nhật đánh giá', error: error.message });
+   }
+};
+
+// Driver phản hồi đánh giá
+export const respondToFeedback = async (req, res) => {
+   try {
+      const { feedbackId } = req.params;
+      const { response } = req.body;
+
+      const feedback = await Feedback.findByIdAndUpdate(
+         feedbackId,
+         { driverResponse: response },
+         { new: true }
+      );
+
+      if (!feedback) {
+         return res.status(404).json({ success: false, message: 'Không tìm thấy đánh giá' });
+      }
+
+      return res.json({ success: true, data: feedback });
+   } catch (error) {
+      return res.status(500).json({ success: false, message: 'Lỗi phản hồi đánh giá', error: error.message });
    }
 };
 

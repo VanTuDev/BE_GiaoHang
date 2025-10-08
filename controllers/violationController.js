@@ -16,6 +16,21 @@ export const reportViolation = async (req, res) => {
          isAnonymous = false
       } = req.body;
 
+      // Nếu không có driverId, lấy từ đơn hàng
+      if (!driverId && orderId) {
+         const order = await Order.findById(orderId);
+         if (order) {
+            const deliveredItem = order.items.find(item => item.status === 'Delivered' && item.driverId);
+            if (deliveredItem) {
+               driverId = deliveredItem.driverId;
+            }
+         }
+      }
+
+      if (!driverId) {
+         return res.status(400).json({ success: false, message: 'Không tìm thấy tài xế cho đơn hàng này' });
+      }
+
       // Kiểm tra driver tồn tại
       const driver = await Driver.findById(driverId);
       if (!driver) {
