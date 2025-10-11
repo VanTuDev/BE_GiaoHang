@@ -3,36 +3,61 @@ import Driver from '../models/driver.model.js';
 import Vehicle from '../models/vehicle.model.js';
 import DriverTransaction from '../models/driverTransaction.model.js';
 import { calcOrderPrice } from '../utils/pricing.js';
+import { io } from '../index.js';
 
-// Customer tạo đơn (nhiều item)
+/**
+ * LUỒNG 1: KHÁCH HÀNG TẠO ĐƠN HÀNG
+ * Khách hàng đặt xe -> Tạo đơn hàng với trạng thái "Created" -> Hiển thị trong "Đơn có sẵn" của tài xế
+ * - Tính toán giá cả dựa trên loại xe, khoảng cách, trọng lượng
+ * - Kiểm tra có xe phù hợp không
+ * - Phát tín hiệu realtime cho tài xế về đơn mới
+ */
 export const createOrder = async (req, res) => {
    try {
       const { pickupAddress, dropoffAddress, items, customerNote, paymentMethod = 'Cash' } = req.body;
+
+      // Validate địa chỉ
       if (!pickupAddress || !dropoffAddress) {
          return res.status(400).json({ success: false, message: 'Thiếu địa chỉ lấy/giao' });
       }
 
+      // Validate danh sách items
       if (!Array.isArray(items) || items.length === 0) {
          return res.status(400).json({ success: false, message: 'Thiếu danh sách items' });
       }
 
       const mapped = [];
       let totalPrice = 0;
+
+      // Xử lý từng item trong đơn hàng
       for (const it of items) {
          const { vehicleType, weightKg, distanceKm, loadingService, insurance, itemPhotos } = it || {};
+
+         // Validate thông tin item
          if (!vehicleType || !weightKg || !distanceKm) {
             return res.status(400).json({ success: false, message: 'Item thiếu vehicleType/weightKg/distanceKm' });
          }
 
-         // optional: kiểm tra có xe phù hợp
-         const anyVehicle = await Vehicle.findOne({ type: vehicleType, maxWeightKg: { $gte: weightKg }, status: 'Active' });
-         if (!anyVehicle) return res.status(400).json({ success: false, message: `Không có xe phù hợp cho trọng lượng ${weightKg}kg (type ${vehicleType})` });
+         // Kiểm tra có xe phù hợp với yêu cầu không
+         const anyVehicle = await Vehicle.findOne({
+            type: vehicleType,
+            maxWeightKg: { $gte: weightKg },
+            status: 'Active'
+         });
+         if (!anyVehicle) {
+            return res.status(400).json({
+               success: false,
+               message: `Không có xe phù hợp cho trọng lượng ${weightKg}kg (type ${vehicleType})`
+            });
+         }
 
-         const insuranceFee = insurance ? 100000 : 0; // 100k-200k tuỳ chính sách
-         const loadingFee = loadingService ? 50000 : 0; // phụ phí bốc dỡ mẫu
+         // Tính toán giá cả
+         const insuranceFee = insurance ? 100000 : 0; // 100k phí bảo hiểm
+         const loadingFee = loadingService ? 50000 : 0; // 50k phí bốc xếp
          const breakdown = calcOrderPrice({ weightKg, distanceKm, loadingService, loadingFee, insuranceFee });
          totalPrice += breakdown.total;
 
+         // Tạo item với trạng thái "Created" (Đơn có sẵn)
          mapped.push({
             vehicleType,
             weightKg,
@@ -40,11 +65,12 @@ export const createOrder = async (req, res) => {
             loadingService: !!loadingService,
             insurance: !!insurance,
             priceBreakdown: breakdown,
-            status: 'Created',
+            status: 'Created', // Trạng thái ban đầu: Đơn có sẵn
             itemPhotos: Array.isArray(itemPhotos) ? itemPhotos : []
          });
       }
 
+      // Tạo đơn hàng
       const order = await Order.create({
          customerId: req.user._id,
          pickupAddress,
@@ -56,8 +82,24 @@ export const createOrder = async (req, res) => {
          paymentStatus: 'Pending'
       });
 
+      // Phát tín hiệu realtime cho tài xế: Có đơn mới trong "Đơn có sẵn"
+      try {
+         io.to('drivers').emit('order:available:new', {
+            orderId: order._id,
+            pickupAddress: order.pickupAddress,
+            dropoffAddress: order.dropoffAddress,
+            totalPrice: order.totalPrice,
+            createdAt: order.createdAt
+         });
+         console.log('📡 Đã phát tín hiệu đơn mới cho tài xế');
+      } catch (emitError) {
+         console.error('Lỗi phát tín hiệu:', emitError);
+      }
+
+      console.log('✅ Tạo đơn hàng thành công:', order._id);
       return res.status(201).json({ success: true, data: order });
    } catch (error) {
+      console.error('❌ Lỗi tạo đơn:', error);
       return res.status(500).json({ success: false, message: 'Lỗi tạo đơn', error: error.message });
    }
 };
@@ -82,67 +124,113 @@ export const setDriverOnline = async (req, res) => {
    }
 };
 
-// Driver nhận đơn (mỗi lần chỉ 1 đơn đang active)
+/**
+ * LUỒNG 2: TÀI XẾ NHẬN ĐƠN HÀNG
+ * Khi tài xế nhận đơn từ "Đơn có sẵn" -> chuyển sang "Đơn đã nhận"
+ * - Item status: Created -> Accepted
+ * - Gán driverId cho item
+ * - Cập nhật trạng thái tổng của đơn hàng
+ */
 export const acceptOrderItem = async (req, res) => {
    try {
       const { orderId, itemId } = req.params;
-      const driver = await Driver.findOne({ userId: req.user._id });
-      if (!driver) return res.status(400).json({ success: false, message: 'Chưa có hồ sơ tài xế' });
 
-      // Chỉ cho phép 1 item đang active mỗi lần
-      const concurrent = await Order.findOne({
-         'items.driverId': driver._id,
-         'items.status': { $in: ['Accepted', 'PickedUp', 'Delivering'] }
+      // Tìm thông tin tài xế từ user đã đăng nhập
+      const driver = await Driver.findOne({ userId: req.user._id });
+      if (!driver) {
+         return res.status(404).json({ success: false, message: 'Không tìm thấy hồ sơ tài xế' });
+      }
+
+      // Tìm đơn hàng
+      const order = await Order.findById(orderId);
+      if (!order) {
+         return res.status(404).json({ success: false, message: 'Không tìm thấy đơn hàng' });
+      }
+
+      // Tìm item trong đơn hàng
+      const item = order.items.id(itemId);
+      if (!item) {
+         return res.status(404).json({ success: false, message: 'Không tìm thấy mục hàng' });
+      }
+
+      // Kiểm tra item phải ở trạng thái "Created" mới có thể nhận
+      if (item.status !== 'Created') {
+         return res.status(400).json({ success: false, message: 'Mục hàng này không thể nhận' });
+      }
+
+      // Cập nhật thông tin item: gán tài xế và chuyển trạng thái sang "Accepted"
+      item.driverId = driver._id;
+      item.status = 'Accepted';
+      item.acceptedAt = new Date();
+
+      await order.save();
+
+      // Cập nhật trạng thái tổng của đơn hàng (Created -> InProgress)
+      console.log('🔄 Đang cập nhật trạng thái tổng của đơn hàng...');
+      await updateOrderStatus(orderId);
+
+      // Lấy lại đơn hàng đã cập nhật để trả về
+      const updatedOrder = await Order.findById(orderId)
+         .populate('customerId', 'name phone email')
+         .populate({
+            path: 'items.driverId',
+            populate: {
+               path: 'userId',
+               select: 'name phone avatarUrl'
+            }
+         });
+
+      console.log('✅ Tài xế nhận đơn thành công:', {
+         orderId,
+         itemId,
+         driverId: driver._id,
+         orderStatus: updatedOrder.status
       });
 
-      if (concurrent) {
-         return res.status(400).json({ success: false, message: 'Bạn đang có đơn hoạt động, không thể nhận thêm' });
-      }
-
-      const order = await Order.findOneAndUpdate(
-         { _id: orderId, 'items._id': itemId, 'items.status': 'Created' },
-         {
-            $set: {
-               'items.$.status': 'Accepted',
-               'items.$.driverId': driver._id,
-               'items.$.acceptedAt': new Date(),
-               'status': 'InProgress'
-            }
-         },
-         { new: true }
-      );
-
-      if (!order) {
-         return res.status(400).json({ success: false, message: 'Item không khả dụng' });
-      }
-
-      return res.json({ success: true, data: order });
+      return res.json({ success: true, data: updatedOrder });
    } catch (error) {
-      return res.status(500).json({ success: false, message: 'Lỗi nhận đơn', error: error.message });
+      console.error('❌ Lỗi nhận đơn hàng:', error);
+      return res.status(500).json({ success: false, message: 'Lỗi nhận đơn hàng', error: error.message });
    }
 };
 
-// Driver cập nhật trạng thái
+/**
+ * LUỒNG 3: TÀI XẾ CẬP NHẬT TRẠNG THÁI ĐƠN HÀNG
+ * Từ "Đơn đã nhận" -> "Đơn đang giao" -> "Đã hoàn thành" hoặc "Đơn hủy"
+ * 
+ * Trạng thái có thể cập nhật:
+ * - PickedUp: Đã lấy hàng
+ * - Delivering: Đang giao hàng (hiển thị trong "Đơn đang giao")
+ * - Delivered: Đã giao hàng (hiển thị trong "Đã hoàn thành")
+ * - Cancelled: Hủy đơn (hiển thị trong "Đơn hủy")
+ */
 export const updateOrderItemStatus = async (req, res) => {
    try {
       const { orderId, itemId } = req.params;
-      const { status } = req.body; // PickedUp | Delivering | Delivered | Cancelled
-      const driver = await Driver.findOne({ userId: req.user._id });
-      if (!driver) return res.status(400).json({ success: false, message: 'Chưa có hồ sơ tài xế' });
+      const { status } = req.body;
 
+      // Tìm thông tin tài xế
+      const driver = await Driver.findOne({ userId: req.user._id });
+      if (!driver) {
+         return res.status(400).json({ success: false, message: 'Chưa có hồ sơ tài xế' });
+      }
+
+      // Kiểm tra trạng thái hợp lệ
       const allowed = ['PickedUp', 'Delivering', 'Delivered', 'Cancelled'];
       if (!allowed.includes(status)) {
          return res.status(400).json({ success: false, message: 'Trạng thái không hợp lệ' });
       }
 
+      // Chuẩn bị fields cần cập nhật
       const updateFields = {};
       updateFields['items.$.status'] = status;
 
-      // Cập nhật thời gian tương ứng với trạng thái
+      // Cập nhật thời gian tương ứng với từng trạng thái
       if (status === 'PickedUp') updateFields['items.$.pickedUpAt'] = new Date();
       if (status === 'Delivered') updateFields['items.$.deliveredAt'] = new Date();
       if (status === 'Cancelled') updateFields['items.$.cancelledAt'] = new Date();
 
+      // Cập nhật item trong đơn hàng
       const order = await Order.findOneAndUpdate(
          { _id: orderId, 'items._id': itemId, 'items.driverId': driver._id },
          { $set: updateFields },
@@ -153,14 +241,15 @@ export const updateOrderItemStatus = async (req, res) => {
          return res.status(404).json({ success: false, message: 'Không tìm thấy item phù hợp' });
       }
 
-      // Nếu đã giao hàng thành công, tạo giao dịch thu nhập cho tài xế
+      // Nếu đã giao hàng thành công -> Tạo giao dịch thu nhập cho tài xế
       if (status === 'Delivered') {
          const item = order.items.find(i => String(i._id) === String(itemId));
          if (item && item.priceBreakdown && item.priceBreakdown.total) {
             const amount = item.priceBreakdown.total;
-            const fee = Math.round(amount * 0.2); // 20% hoa hồng
-            const netAmount = amount - fee;
+            const fee = Math.round(amount * 0.2); // 20% hoa hồng cho hệ thống
+            const netAmount = amount - fee; // Số tiền tài xế nhận được
 
+            // Tạo giao dịch thu nhập
             await DriverTransaction.create({
                driverId: driver._id,
                orderId: order._id,
@@ -173,18 +262,26 @@ export const updateOrderItemStatus = async (req, res) => {
                description: `Thu nhập từ đơn hàng #${order._id}`
             });
 
-            // Cập nhật số dư tài xế
+            // Cập nhật số dư và số chuyến của tài xế
             await Driver.findByIdAndUpdate(driver._id, {
                $inc: { incomeBalance: netAmount, totalTrips: 1 }
+            });
+
+            console.log('💰 Đã tạo giao dịch thu nhập cho tài xế:', {
+               driverId: driver._id,
+               amount,
+               netAmount
             });
          }
       }
 
-      // Kiểm tra và cập nhật trạng thái đơn hàng tổng
+      // Cập nhật trạng thái tổng của đơn hàng
       await updateOrderStatus(orderId);
 
+      console.log(`✅ Cập nhật trạng thái thành công: ${status}`, { orderId, itemId });
       return res.json({ success: true, data: order });
    } catch (error) {
+      console.error('❌ Lỗi cập nhật trạng thái:', error);
       return res.status(500).json({ success: false, message: 'Lỗi cập nhật trạng thái đơn', error: error.message });
    }
 };
@@ -205,6 +302,14 @@ export const getCustomerOrders = async (req, res) => {
 
       const [orders, total] = await Promise.all([
          Order.find(query)
+            .populate({
+               path: 'items.driverId',
+               select: 'userId rating totalTrips avatarUrl',
+               populate: {
+                  path: 'userId',
+                  select: 'name phone avatarUrl'
+               }
+            })
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limitNum),
@@ -267,8 +372,9 @@ export const getDriverOrders = async (req, res) => {
 
       const query = { 'items.driverId': driver._id };
 
-      if (status && ['Accepted', 'PickedUp', 'Delivering', 'Delivered', 'Cancelled'].includes(status)) {
-         query['items.status'] = status;
+      if (status) {
+         const statusArray = status.split(',');
+         query['items.status'] = { $in: statusArray };
       }
 
       const pageNum = Math.max(parseInt(page) || 1, 1);
@@ -277,11 +383,26 @@ export const getDriverOrders = async (req, res) => {
 
       const [orders, total] = await Promise.all([
          Order.find(query)
+            .populate('customerId', 'name phone email avatarUrl')
+            .populate({
+               path: 'items.driverId',
+               populate: {
+                  path: 'userId',
+                  select: 'name phone avatarUrl'
+               }
+            })
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limitNum),
          Order.countDocuments(query)
       ]);
+
+      console.log(`📦 [getDriverOrders] Lấy đơn hàng cho tài xế:`, {
+         driverId: driver._id,
+         status: status || 'all',
+         count: orders.length,
+         total
+      });
 
       return res.json({
          success: true,
@@ -360,7 +481,7 @@ export const getAvailableOrders = async (req, res) => {
    }
 };
 
-// Customer huỷ đơn hàng
+// Khách hàng hủy đơn hàng nếu chưa có tài xế nhận
 export const cancelOrder = async (req, res) => {
    try {
       const { orderId } = req.params;
@@ -371,68 +492,23 @@ export const cancelOrder = async (req, res) => {
          return res.status(404).json({ success: false, message: 'Không tìm thấy đơn hàng' });
       }
 
-      // Kiểm tra quyền huỷ đơn (chỉ customer sở hữu đơn mới được huỷ)
+      // Kiểm tra quyền hủy đơn hàng
       if (String(order.customerId) !== String(req.user._id)) {
-         return res.status(403).json({ success: false, message: 'Không có quyền huỷ đơn hàng này' });
+         return res.status(403).json({ success: false, message: 'Không có quyền hủy đơn hàng này' });
       }
 
-      // Kiểm tra trạng thái đơn hàng (chỉ cho phép huỷ đơn ở trạng thái Created hoặc InProgress)
-      if (!['Created', 'InProgress'].includes(order.status)) {
-         return res.status(400).json({
-            success: false,
-            message: 'Không thể huỷ đơn hàng ở trạng thái này'
-         });
+      // Kiểm tra trạng thái đơn hàng
+      const hasAcceptedItems = order.items.some(item => item.status !== 'Created');
+      if (hasAcceptedItems) {
+         return res.status(400).json({ success: false, message: 'Không thể hủy đơn hàng đã có tài xế nhận' });
       }
 
-      // Kiểm tra các items đã được tài xế nhận chưa
-      const acceptedItems = order.items.filter(item =>
-         ['Accepted', 'PickedUp', 'Delivering'].includes(item.status)
-      );
+      // Xóa đơn hàng nếu chưa có tài xế nhận
+      await Order.findByIdAndDelete(orderId);
 
-      if (acceptedItems.length > 0) {
-         return res.status(400).json({
-            success: false,
-            message: 'Không thể huỷ đơn hàng đã được tài xế nhận. Vui lòng liên hệ tài xế để huỷ.'
-         });
-      }
-
-      // Cập nhật trạng thái tất cả items thành Cancelled
-      const updatePromises = order.items.map(item => {
-         return Order.findOneAndUpdate(
-            { _id: orderId, 'items._id': item._id },
-            {
-               $set: {
-                  'items.$.status': 'Cancelled',
-                  'items.$.cancelledAt': new Date(),
-                  'items.$.cancelReason': reason || 'Khách hàng huỷ đơn'
-               }
-            }
-         );
-      });
-
-      await Promise.all(updatePromises);
-
-      // Cập nhật trạng thái đơn hàng tổng
-      await Order.findByIdAndUpdate(orderId, {
-         status: 'Cancelled',
-         customerNote: order.customerNote ?
-            `${order.customerNote}\n\nLý do huỷ: ${reason || 'Khách hàng huỷ đơn'}` :
-            `Lý do huỷ: ${reason || 'Khách hàng huỷ đơn'}`
-      });
-
-      const updatedOrder = await Order.findById(orderId);
-
-      return res.json({
-         success: true,
-         message: 'Huỷ đơn hàng thành công',
-         data: updatedOrder
-      });
+      return res.json({ success: true, message: 'Đơn hàng đã được hủy và xóa thành công' });
    } catch (error) {
-      return res.status(500).json({
-         success: false,
-         message: 'Lỗi huỷ đơn hàng',
-         error: error.message
-      });
+      return res.status(500).json({ success: false, message: 'Lỗi hủy đơn hàng', error: error.message });
    }
 };
 
@@ -520,37 +596,49 @@ export const updateOrderInsurance = async (req, res) => {
    }
 };
 
-// Hàm helper để cập nhật trạng thái đơn hàng tổng
+/**
+ * HÀM HELPER: CẬP NHẬT TRẠNG THÁI TỔNG CỦA ĐƠN HÀNG
+ * Tự động cập nhật trạng thái tổng của đơn hàng dựa trên trạng thái của các items
+ * 
+ * Logic:
+ * - Nếu TẤT CẢ items đã hoàn thành -> Đơn hàng "Completed"
+ * - Nếu TẤT CẢ items đã hủy -> Đơn hàng "Cancelled"
+ * - Nếu có ÍT NHẤT 1 item đang active (Accepted/PickedUp/Delivering) -> Đơn hàng "InProgress"
+ * - Mặc định -> "Created"
+ */
 async function updateOrderStatus(orderId) {
    try {
       const order = await Order.findById(orderId);
       if (!order) return;
 
-      // Nếu tất cả items đều đã hoàn thành
+      // Kiểm tra: Tất cả items đã hoàn thành -> Đơn "Completed"
       const allDelivered = order.items.every(item => item.status === 'Delivered');
       if (allDelivered) {
          order.status = 'Completed';
          await order.save();
+         console.log(`🎉 Đơn hàng ${orderId} đã hoàn thành tất cả items`);
          return;
       }
 
-      // Nếu tất cả items đều đã hủy
+      // Kiểm tra: Tất cả items đã hủy -> Đơn "Cancelled"
       const allCancelled = order.items.every(item => item.status === 'Cancelled');
       if (allCancelled) {
          order.status = 'Cancelled';
          await order.save();
+         console.log(`❌ Đơn hàng ${orderId} đã bị hủy toàn bộ`);
          return;
       }
 
-      // Nếu có ít nhất 1 item đang active
+      // Kiểm tra: Có ít nhất 1 item đang hoạt động -> Đơn "InProgress"
       const anyActive = order.items.some(item =>
          ['Accepted', 'PickedUp', 'Delivering'].includes(item.status)
       );
       if (anyActive) {
          order.status = 'InProgress';
          await order.save();
+         console.log(`🚚 Đơn hàng ${orderId} đang được xử lý`);
       }
    } catch (error) {
-      console.error('Lỗi cập nhật trạng thái đơn hàng:', error);
+      console.error('❌ Lỗi cập nhật trạng thái đơn hàng:', error);
    }
 }

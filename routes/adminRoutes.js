@@ -6,7 +6,8 @@ import {
    getDrivers,
    getOrders,
    getRevenueReport,
-   getDriverDetail
+   getDriverDetail,
+   getUserDetail
 } from '../controllers/adminController.js';
 
 const router = express.Router();
@@ -19,6 +20,7 @@ router.get('/dashboard', getDashboardStats);
 
 // Quản lý người dùng
 router.get('/users', getUsers);
+router.get('/users/:userId', getUserDetail);
 
 // Quản lý tài xế
 router.get('/drivers', getDrivers);

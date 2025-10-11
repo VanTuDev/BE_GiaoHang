@@ -2,11 +2,28 @@ import http from 'http';
 import connectDB from './config/db.js';
 import config from './config/config.js';
 import app from './app.js';
+import { Server as SocketIOServer } from 'socket.io';
 
 // Kết nối database
 connectDB();
 
 const server = http.createServer(app);
+
+// Socket.IO
+export const io = new SocketIOServer(server, {
+   cors: { origin: config.clientURL || 'http://localhost:3000' }
+});
+
+io.on('connection', (socket) => {
+   // Driver join để nhận đơn có sẵn
+   socket.on('driver:join', (driverId) => {
+      socket.join('drivers');
+   });
+
+   socket.on('disconnect', () => {
+      // noop
+   });
+});
 
 // Xử lý lỗi 404
 app.use((req, res) => {

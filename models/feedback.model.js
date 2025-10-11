@@ -30,6 +30,9 @@ const feedbackSchema = new mongoose.Schema({
    // Phản hồi từ admin (nếu có)
    adminResponse: String,
 
+   // Phản hồi từ tài xế (nếu có)
+   driverResponse: String,
+
    // Thông tin bổ sung
    isAnonymous: { type: Boolean, default: false },
    helpfulCount: { type: Number, default: 0 }, // Số lượt đánh giá hữu ích
