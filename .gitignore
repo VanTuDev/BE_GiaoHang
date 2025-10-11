@@ -28,5 +28,3 @@ logs/
 Thumbs.db
 
 # Config files containing sensitive information
-config/config.js
-scripts/create-env.js
