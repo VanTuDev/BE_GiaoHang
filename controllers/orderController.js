@@ -302,6 +302,14 @@ export const getCustomerOrders = async (req, res) => {
 
       const [orders, total] = await Promise.all([
          Order.find(query)
+            .populate({
+               path: 'items.driverId',
+               select: 'userId rating totalTrips avatarUrl',
+               populate: {
+                  path: 'userId',
+                  select: 'name phone avatarUrl'
+               }
+            })
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limitNum),

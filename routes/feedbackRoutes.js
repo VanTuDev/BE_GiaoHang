@@ -4,6 +4,7 @@ import {
    createFeedback,
    getDriverFeedbacks,
    getCustomerFeedbacks,
+   getOrderFeedbacks,
    getAllFeedbacks,
    updateFeedbackStatus,
    respondToFeedback
@@ -19,6 +20,9 @@ router.get('/my-feedbacks', authenticate, authorize(roles.CUSTOMER), getCustomer
 
 // Public: Lấy đánh giá của driver (không cần auth)
 router.get('/driver/:driverId', getDriverFeedbacks);
+
+// Public: Lấy đánh giá của đơn hàng (cho tài xế xem feedback)
+router.get('/order/:orderId', authenticate, getOrderFeedbacks);
 
 // Admin: Lấy tất cả đánh giá
 router.get('/admin/all', authenticate, authorize(roles.ADMIN), getAllFeedbacks);

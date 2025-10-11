@@ -214,6 +214,26 @@ export const getCustomerFeedbacks = async (req, res) => {
    }
 };
 
+// Lấy đánh giá của một đơn hàng cụ thể (cho tài xế xem feedback của họ)
+export const getOrderFeedbacks = async (req, res) => {
+   try {
+      const { orderId } = req.params;
+
+      // Tìm tất cả feedback cho đơn hàng này
+      const feedbacks = await Feedback.find({ orderId, status: 'Approved' })
+         .populate('customerId', 'name avatarUrl')
+         .populate('driverId', 'userId rating')
+         .sort({ createdAt: -1 });
+
+      return res.json({
+         success: true,
+         data: feedbacks
+      });
+   } catch (error) {
+      return res.status(500).json({ success: false, message: 'Lỗi lấy đánh giá đơn hàng', error: error.message });
+   }
+};
+
 // Admin: Lấy tất cả đánh giá
 export const getAllFeedbacks = async (req, res) => {
    try {
