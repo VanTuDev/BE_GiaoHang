@@ -1,0 +1,33 @@
+   {
+      "name": "4. Upload avatar",
+      "request": {
+         "method": "POST",
+         "header": [
+            {
+               "key": "Authorization",
+               "value": "Bearer {{token}}"
+            },
+            {
+               "key": "Content-Type",
+               "value": "application/json"
+            }
+         ],
+         "body": {
+            "mode": "raw",
+            "raw": "{\n  \"avatarUrl\": \"https://res.cloudinary.com/your-cloud-name/image/upload/v1234567890/avatars/abcdef.jpg\"\n}"
+         },
+         "url": {
+            "raw": "{{baseUrl}}/api/profile/avatar",
+            "host": [
+               "{{baseUrl}}"
+            ],
+            "path": [
+               "api",
+               "profile",
+               "avatar"
+            ]
+         },
+         "description": "Cập nhật avatar cho người dùng"
+      },
+      "response": []
+   },

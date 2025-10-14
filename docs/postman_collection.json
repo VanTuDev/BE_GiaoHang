@@ -1,0 +1,842 @@
+{
+   "info": {
+      "_postman_id": "a8e7b9c3-5d6f-4e2a-b1c8-f9a4d5b3c2e1",
+      "name": "GiaoHangDaNang API",
+      "description": "API cho hệ thống đặt giao hàng nhanh",
+      "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+   },
+   "item": [
+      {
+         "name": "Authentication",
+         "item": [
+            {
+               "name": "Register",
+               "request": {
+                  "method": "POST",
+                  "header": [
+                     {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                     }
+                  ],
+                  "body": {
+                     "mode": "raw",
+                     "raw": "{\n  \"name\": \"Nguyễn Văn A\",\n  \"email\": \"nguyenvana@example.com\",\n  \"phone\": \"0901234567\",\n  \"password\": \"password123\"\n}"
+                  },
+                  "url": {
+                     "raw": "{{baseUrl}}/api/auth/register",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "api",
+                        "auth",
+                        "register"
+                     ]
+                  },
+                  "description": "Đăng ký tài khoản mới"
+               },
+               "response": []
+            },
+            {
+               "name": "Login",
+               "event": [
+                  {
+                     "listen": "test",
+                     "script": {
+                        "exec": [
+                           "var jsonData = pm.response.json();",
+                           "if (jsonData.success && jsonData.data && jsonData.data.accessToken) {",
+                           "    pm.environment.set('token', jsonData.data.accessToken);",
+                           "}"
+                        ],
+                        "type": "text/javascript"
+                     }
+                  }
+               ],
+               "request": {
+                  "method": "POST",
+                  "header": [
+                     {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                     }
+                  ],
+                  "body": {
+                     "mode": "raw",
+                     "raw": "{\n  \"phone\": \"0901234567\",\n  \"password\": \"password123\"\n}"
+                  },
+                  "url": {
+                     "raw": "{{baseUrl}}/api/auth/login",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "api",
+                        "auth",
+                        "login"
+                     ]
+                  },
+                  "description": "Đăng nhập và lấy token"
+               },
+               "response": []
+            },
+            {
+               "name": "Verify Email",
+               "request": {
+                  "method": "POST",
+                  "header": [
+                     {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                     }
+                  ],
+                  "body": {
+                     "mode": "raw",
+                     "raw": "{\n  \"email\": \"nguyenvana@example.com\",\n  \"code\": \"123456\"\n}"
+                  },
+                  "url": {
+                     "raw": "{{baseUrl}}/api/auth/verify-email",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "api",
+                        "auth",
+                        "verify-email"
+                     ]
+                  },
+                  "description": "Xác thực email bằng mã OTP"
+               },
+               "response": []
+            }
+         ],
+         "description": "Các API liên quan đến xác thực người dùng"
+      },
+      {
+         "name": "Vehicles",
+         "item": [
+            {
+               "name": "Get Vehicle Types",
+               "request": {
+                  "method": "GET",
+                  "header": [],
+                  "url": {
+                     "raw": "{{baseUrl}}/api/vehicles/types",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "api",
+                        "vehicles",
+                        "types"
+                     ]
+                  },
+                  "description": "Lấy danh sách loại xe"
+               },
+               "response": []
+            },
+            {
+               "name": "List Vehicles",
+               "request": {
+                  "method": "GET",
+                  "header": [],
+                  "url": {
+                     "raw": "{{baseUrl}}/api/vehicles?type=TruckSmall&weightKg=800&onlineOnly=true",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "api",
+                        "vehicles"
+                     ],
+                     "query": [
+                        {
+                           "key": "type",
+                           "value": "TruckSmall"
+                        },
+                        {
+                           "key": "weightKg",
+                           "value": "800"
+                        },
+                        {
+                           "key": "onlineOnly",
+                           "value": "true"
+                        }
+                     ]
+                  },
+                  "description": "Lấy danh sách xe (có thể lọc)"
+               },
+               "response": []
+            },
+            {
+               "name": "Add Vehicle (Driver)",
+               "request": {
+                  "method": "POST",
+                  "header": [
+                     {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}"
+                     }
+                  ],
+                  "body": {
+                     "mode": "formdata",
+                     "formdata": [
+                        {
+                           "key": "type",
+                           "value": "TruckSmall",
+                           "type": "text"
+                        },
+                        {
+                           "key": "licensePlate",
+                           "value": "43A-12345",
+                           "type": "text"
+                        },
+                        {
+                           "key": "maxWeightKg",
+                           "value": "1000",
+                           "type": "text"
+                        },
+                        {
+                           "key": "description",
+                           "value": "Xe tải nhỏ chở hàng nhẹ",
+                           "type": "text"
+                        },
+                        {
+                           "key": "features",
+                           "value": "Bảo vệ hàng hóa",
+                           "type": "text"
+                        },
+                        {
+                           "key": "features",
+                           "value": "Đúng giờ",
+                           "type": "text"
+                        },
+                        {
+                           "key": "photo",
+                           "type": "file",
+                           "src": []
+                        }
+                     ]
+                  },
+                  "url": {
+                     "raw": "{{baseUrl}}/api/vehicles",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "api",
+                        "vehicles"
+                     ]
+                  },
+                  "description": "Tài xế thêm xe mới"
+               },
+               "response": []
+            },
+            {
+               "name": "Get My Vehicles (Driver)",
+               "request": {
+                  "method": "GET",
+                  "header": [
+                     {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}"
+                     }
+                  ],
+                  "url": {
+                     "raw": "{{baseUrl}}/api/vehicles/my-vehicles",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "api",
+                        "vehicles",
+                        "my-vehicles"
+                     ]
+                  },
+                  "description": "Tài xế xem danh sách xe của mình"
+               },
+               "response": []
+            }
+         ],
+         "description": "Các API liên quan đến quản lý xe"
+      },
+      {
+         "name": "Orders",
+         "item": [
+            {
+               "name": "Create Order (Customer)",
+               "request": {
+                  "method": "POST",
+                  "header": [
+                     {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}"
+                     },
+                     {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                     }
+                  ],
+                  "body": {
+                     "mode": "raw",
+                     "raw": "{\n  \"pickupAddress\": \"123 Nguyễn Văn Linh, Đà Nẵng\",\n  \"dropoffAddress\": \"456 Trần Phú, Đà Nẵng\",\n  \"customerNote\": \"Giao hàng trong giờ hành chính\",\n  \"paymentMethod\": \"Cash\",\n  \"items\": [\n    {\n      \"vehicleType\": \"TruckSmall\",\n      \"weightKg\": 800,\n      \"distanceKm\": 10,\n      \"loadingService\": true,\n      \"insurance\": true\n    },\n    {\n      \"vehicleType\": \"TruckMedium\",\n      \"weightKg\": 2000,\n      \"distanceKm\": 10,\n      \"loadingService\": false,\n      \"insurance\": false\n    }\n  ]\n}"
+                  },
+                  "url": {
+                     "raw": "{{baseUrl}}/api/orders",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "api",
+                        "orders"
+                     ]
+                  },
+                  "description": "Khách hàng tạo đơn hàng mới"
+               },
+               "response": []
+            },
+            {
+               "name": "Get My Orders (Customer)",
+               "request": {
+                  "method": "GET",
+                  "header": [
+                     {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}"
+                     }
+                  ],
+                  "url": {
+                     "raw": "{{baseUrl}}/api/orders/my-orders",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "api",
+                        "orders",
+                        "my-orders"
+                     ]
+                  },
+                  "description": "Khách hàng xem danh sách đơn hàng của mình"
+               },
+               "response": []
+            },
+            {
+               "name": "Set Driver Online",
+               "request": {
+                  "method": "PUT",
+                  "header": [
+                     {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}"
+                     },
+                     {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                     }
+                  ],
+                  "body": {
+                     "mode": "raw",
+                     "raw": "{\n  \"online\": true\n}"
+                  },
+                  "url": {
+                     "raw": "{{baseUrl}}/api/orders/driver/online",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "api",
+                        "orders",
+                        "driver",
+                        "online"
+                     ]
+                  },
+                  "description": "Tài xế bật/tắt trạng thái online"
+               },
+               "response": []
+            },
+            {
+               "name": "Get Available Orders (Driver)",
+               "request": {
+                  "method": "GET",
+                  "header": [
+                     {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}"
+                     }
+                  ],
+                  "url": {
+                     "raw": "{{baseUrl}}/api/orders/driver/available",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "api",
+                        "orders",
+                        "driver",
+                        "available"
+                     ]
+                  },
+                  "description": "Tài xế xem danh sách đơn hàng có sẵn để nhận"
+               },
+               "response": []
+            },
+            {
+               "name": "Accept Order Item (Driver)",
+               "request": {
+                  "method": "PUT",
+                  "header": [
+                     {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}"
+                     }
+                  ],
+                  "url": {
+                     "raw": "{{baseUrl}}/api/orders/:orderId/items/:itemId/accept",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "api",
+                        "orders",
+                        ":orderId",
+                        "items",
+                        ":itemId",
+                        "accept"
+                     ],
+                     "variable": [
+                        {
+                           "key": "orderId",
+                           "value": "60d5ec9d8e8f8c2d4c8b4567"
+                        },
+                        {
+                           "key": "itemId",
+                           "value": "60d5ec9d8e8f8c2d4c8b4568"
+                        }
+                     ]
+                  },
+                  "description": "Tài xế nhận đơn hàng"
+               },
+               "response": []
+            },
+            {
+               "name": "Update Order Item Status (Driver)",
+               "request": {
+                  "method": "PUT",
+                  "header": [
+                     {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}"
+                     },
+                     {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                     }
+                  ],
+                  "body": {
+                     "mode": "raw",
+                     "raw": "{\n  \"status\": \"PickedUp\"\n}"
+                  },
+                  "url": {
+                     "raw": "{{baseUrl}}/api/orders/:orderId/items/:itemId/status",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "api",
+                        "orders",
+                        ":orderId",
+                        "items",
+                        ":itemId",
+                        "status"
+                     ],
+                     "variable": [
+                        {
+                           "key": "orderId",
+                           "value": "60d5ec9d8e8f8c2d4c8b4567"
+                        },
+                        {
+                           "key": "itemId",
+                           "value": "60d5ec9d8e8f8c2d4c8b4568"
+                        }
+                     ]
+                  },
+                  "description": "Tài xế cập nhật trạng thái đơn hàng"
+               },
+               "response": []
+            },
+            {
+               "name": "Get Order Detail",
+               "request": {
+                  "method": "GET",
+                  "header": [
+                     {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}"
+                     }
+                  ],
+                  "url": {
+                     "raw": "{{baseUrl}}/api/orders/:orderId",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "api",
+                        "orders",
+                        ":orderId"
+                     ],
+                     "variable": [
+                        {
+                           "key": "orderId",
+                           "value": "60d5ec9d8e8f8c2d4c8b4567"
+                        }
+                     ]
+                  },
+                  "description": "Xem chi tiết đơn hàng"
+               },
+               "response": []
+            }
+         ],
+         "description": "Các API liên quan đến quản lý đơn hàng"
+      },
+      {
+         "name": "Driver Onboarding",
+         "item": [
+            {
+               "name": "Apply Driver",
+               "request": {
+                  "method": "POST",
+                  "header": [
+                     {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}"
+                     }
+                  ],
+                  "body": {
+                     "mode": "formdata",
+                     "formdata": [
+                        {
+                           "key": "licenseFront",
+                           "type": "file",
+                           "src": []
+                        },
+                        {
+                           "key": "licenseBack",
+                           "type": "file",
+                           "src": []
+                        },
+                        {
+                           "key": "idFront",
+                           "type": "file",
+                           "src": []
+                        },
+                        {
+                           "key": "idBack",
+                           "type": "file",
+                           "src": []
+                        },
+                        {
+                           "key": "portrait",
+                           "type": "file",
+                           "src": []
+                        },
+                        {
+                           "key": "vehiclePhotos",
+                           "type": "file",
+                           "src": []
+                        },
+                        {
+                           "key": "vehicleDocs",
+                           "type": "file",
+                           "src": []
+                        }
+                     ]
+                  },
+                  "url": {
+                     "raw": "{{baseUrl}}/api/driver/apply",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "api",
+                        "driver",
+                        "apply"
+                     ]
+                  },
+                  "description": "Đăng ký làm tài xế"
+               },
+               "response": []
+            },
+            {
+               "name": "Get My Application",
+               "request": {
+                  "method": "GET",
+                  "header": [
+                     {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}"
+                     }
+                  ],
+                  "url": {
+                     "raw": "{{baseUrl}}/api/driver/my-application",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "api",
+                        "driver",
+                        "my-application"
+                     ]
+                  },
+                  "description": "Xem hồ sơ tài xế của tôi"
+               },
+               "response": []
+            },
+            {
+               "name": "Admin List Applications",
+               "request": {
+                  "method": "GET",
+                  "header": [
+                     {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}"
+                     }
+                  ],
+                  "url": {
+                     "raw": "{{baseUrl}}/api/driver/admin/applications?status=Pending",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "api",
+                        "driver",
+                        "admin",
+                        "applications"
+                     ],
+                     "query": [
+                        {
+                           "key": "status",
+                           "value": "Pending"
+                        }
+                     ]
+                  },
+                  "description": "Admin xem danh sách hồ sơ tài xế"
+               },
+               "response": []
+            },
+            {
+               "name": "Admin Review Application",
+               "request": {
+                  "method": "PUT",
+                  "header": [
+                     {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}"
+                     },
+                     {
+                        "key": "Content-Type",
+                        "value": "application/json"
+                     }
+                  ],
+                  "body": {
+                     "mode": "raw",
+                     "raw": "{\n  \"action\": \"approve\",\n  \"adminNote\": \"Hồ sơ đầy đủ, đã xác minh\"\n}"
+                  },
+                  "url": {
+                     "raw": "{{baseUrl}}/api/driver/admin/applications/:applicationId/review",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "api",
+                        "driver",
+                        "admin",
+                        "applications",
+                        ":applicationId",
+                        "review"
+                     ],
+                     "variable": [
+                        {
+                           "key": "applicationId",
+                           "value": "60d5ec9d8e8f8c2d4c8b4567"
+                        }
+                     ]
+                  },
+                  "description": "Admin duyệt hồ sơ tài xế"
+               },
+               "response": []
+            }
+         ],
+         "description": "Các API liên quan đến đăng ký và duyệt tài xế"
+      },
+      {
+         "name": "Admin",
+         "item": [
+            {
+               "name": "Dashboard Stats",
+               "request": {
+                  "method": "GET",
+                  "header": [
+                     {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}"
+                     }
+                  ],
+                  "url": {
+                     "raw": "{{baseUrl}}/api/admin/dashboard",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "api",
+                        "admin",
+                        "dashboard"
+                     ]
+                  },
+                  "description": "Lấy thống kê tổng quan cho admin"
+               },
+               "response": []
+            },
+            {
+               "name": "Get Users",
+               "request": {
+                  "method": "GET",
+                  "header": [
+                     {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}"
+                     }
+                  ],
+                  "url": {
+                     "raw": "{{baseUrl}}/api/admin/users?role=Customer&search=nguyen",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "api",
+                        "admin",
+                        "users"
+                     ],
+                     "query": [
+                        {
+                           "key": "role",
+                           "value": "Customer"
+                        },
+                        {
+                           "key": "search",
+                           "value": "nguyen"
+                        }
+                     ]
+                  },
+                  "description": "Admin lấy danh sách người dùng"
+               },
+               "response": []
+            },
+            {
+               "name": "Get Drivers",
+               "request": {
+                  "method": "GET",
+                  "header": [
+                     {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}"
+                     }
+                  ],
+                  "url": {
+                     "raw": "{{baseUrl}}/api/admin/drivers?status=Active",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "api",
+                        "admin",
+                        "drivers"
+                     ],
+                     "query": [
+                        {
+                           "key": "status",
+                           "value": "Active"
+                        }
+                     ]
+                  },
+                  "description": "Admin lấy danh sách tài xế"
+               },
+               "response": []
+            },
+            {
+               "name": "Get Orders",
+               "request": {
+                  "method": "GET",
+                  "header": [
+                     {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}"
+                     }
+                  ],
+                  "url": {
+                     "raw": "{{baseUrl}}/api/admin/orders?status=Completed",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "api",
+                        "admin",
+                        "orders"
+                     ],
+                     "query": [
+                        {
+                           "key": "status",
+                           "value": "Completed"
+                        }
+                     ]
+                  },
+                  "description": "Admin lấy danh sách đơn hàng"
+               },
+               "response": []
+            },
+            {
+               "name": "Get Revenue Report",
+               "request": {
+                  "method": "GET",
+                  "header": [
+                     {
+                        "key": "Authorization",
+                        "value": "Bearer {{token}}"
+                     }
+                  ],
+                  "url": {
+                     "raw": "{{baseUrl}}/api/admin/revenue?period=monthly&year=2023",
+                     "host": [
+                        "{{baseUrl}}"
+                     ],
+                     "path": [
+                        "api",
+                        "admin",
+                        "revenue"
+                     ],
+                     "query": [
+                        {
+                           "key": "period",
+                           "value": "monthly"
+                        },
+                        {
+                           "key": "year",
+                           "value": "2023"
+                        }
+                     ]
+                  },
+                  "description": "Admin lấy báo cáo doanh thu"
+               },
+               "response": []
+            }
+         ],
+         "description": "Các API dành riêng cho admin"
+      }
+   ],
+   "variable": [
+      {
+         "key": "baseUrl",
+         "value": "http://localhost:5000"
+      }
+   ]
+}

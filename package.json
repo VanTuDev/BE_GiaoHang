@@ -1,0 +1,44 @@
+{
+  "name": "GiaoHangNhanh",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "cross-env NODE_ENV=production node index.js",
+    "dev": "cross-env NODE_ENV=development nodemon index.js",
+    "dev:env": "dotenv -e .env.development nodemon index.js",
+    "prod": "cross-env NODE_ENV=production node index.js",
+    "build": "echo \"Backend không có bước build. Kiểm tra dependencies và cấu hình môi trường...\"",
+    "test": "cross-env NODE_ENV=test echo \"Error: no test specified\" && exit 1",
+    "setup:env": "node scripts/create-env.js",
+    "dev:clean": "npm run setup:env && npm run dev:env",
+    "print:jwt": "node scripts/get-jwt-secret.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bcrypt": "^5.1.1",
+    "cloudinary": "^1.41.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-session": "^1.18.1",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.0.3",
+    "multer": "^2.0.2",
+    "multer-storage-cloudinary": "^4.0.0",
+    "nodemailer": "^6.10.1",
+    "passport": "^0.7.0",
+    "passport-facebook": "^3.0.0",
+    "passport-google-oauth20": "^2.0.0",
+    "socket.io": "^4.7.2"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "dotenv-cli": "^8.0.0",
+    "nodemon": "^3.0.2"
+  }
+}
