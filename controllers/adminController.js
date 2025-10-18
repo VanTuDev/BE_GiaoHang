@@ -3,6 +3,7 @@ import Driver from '../models/driver.model.js';
 import Order from '../models/order.model.js';
 import DriverTransaction from '../models/driverTransaction.model.js';
 import Vehicle from '../models/vehicle.model.js';
+import { sendDriverBannedEmail } from '../utils/emailService.js';
 
 // Lấy thống kê tổng quan
 export const getDashboardStats = async (req, res) => {
@@ -397,5 +398,81 @@ export const getDriverDetail = async (req, res) => {
       });
    } catch (error) {
       return res.status(500).json({ success: false, message: 'Lỗi lấy thông tin tài xế', error: error.message });
+   }
+};
+
+// Admin: Cấm tài xế
+export const banDriver = async (req, res) => {
+   try {
+      const { driverId } = req.params;
+      const { reason, duration } = req.body;
+
+      // Tìm driver
+      const driver = await Driver.findById(driverId).populate('userId', 'name email');
+      if (!driver) {
+         return res.status(404).json({ success: false, message: 'Không tìm thấy tài xế' });
+      }
+
+      // Cập nhật trạng thái driver thành "Blocked"
+      driver.status = 'Blocked';
+      driver.isOnline = false;
+      await driver.save();
+
+      // Gửi email thông báo cho tài xế
+      if (driver.userId && driver.userId.email) {
+         const banReason = reason || 'Vi phạm quy định của hệ thống';
+         const banDuration = duration || 'Vĩnh viễn';
+         await sendDriverBannedEmail(
+            driver.userId.email,
+            driver.userId.name,
+            banReason,
+            banDuration
+         );
+         console.log(`✅ Đã gửi email cấm tài xế: ${driver.userId.email}`);
+      }
+
+      console.log(`⚠️ Admin ${req.user._id} đã cấm tài xế ${driverId}`);
+
+      return res.json({
+         success: true,
+         message: 'Đã cấm tài xế thành công',
+         data: driver
+      });
+   } catch (error) {
+      console.error('❌ Lỗi cấm tài xế:', error);
+      return res.status(500).json({ success: false, message: 'Lỗi cấm tài xế', error: error.message });
+   }
+};
+
+// Admin: Mở cấm tài xế
+export const unbanDriver = async (req, res) => {
+   try {
+      const { driverId } = req.params;
+
+      // Tìm driver
+      const driver = await Driver.findById(driverId).populate('userId', 'name email');
+      if (!driver) {
+         return res.status(404).json({ success: false, message: 'Không tìm thấy tài xế' });
+      }
+
+      // Kiểm tra driver có đang bị cấm không
+      if (driver.status !== 'Blocked') {
+         return res.status(400).json({ success: false, message: 'Tài xế không bị cấm' });
+      }
+
+      // Cập nhật trạng thái driver thành "Active"
+      driver.status = 'Active';
+      await driver.save();
+
+      console.log(`✅ Admin ${req.user._id} đã mở cấm tài xế ${driverId}`);
+
+      return res.json({
+         success: true,
+         message: 'Đã mở cấm tài xế thành công',
+         data: driver
+      });
+   } catch (error) {
+      console.error('❌ Lỗi mở cấm tài xế:', error);
+      return res.status(500).json({ success: false, message: 'Lỗi mở cấm tài xế', error: error.message });
    }
 };

@@ -7,7 +7,9 @@ import {
    getOrders,
    getRevenueReport,
    getDriverDetail,
-   getUserDetail
+   getUserDetail,
+   banDriver,
+   unbanDriver
 } from '../controllers/adminController.js';
 
 const router = express.Router();
@@ -25,6 +27,10 @@ router.get('/users/:userId', getUserDetail);
 // Quản lý tài xế
 router.get('/drivers', getDrivers);
 router.get('/drivers/:driverId', getDriverDetail);
+
+// Cấm/Mở cấm tài xế
+router.put('/drivers/:driverId/ban', banDriver);
+router.put('/drivers/:driverId/unban', unbanDriver);
 
 // Quản lý đơn hàng
 router.get('/orders', getOrders);
