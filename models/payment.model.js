@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 // Thanh toán cho đơn hàng
 const paymentSchema = new mongoose.Schema({
    orderId: { type: mongoose.Schema.Types.ObjectId, ref: "Order", required: true },
+   orderItemId: { type: mongoose.Schema.Types.ObjectId },
    method: { type: String, enum: ["MoMo", "VNPay", "ZaloPay", "COD"], required: true },
    amount: Number,
    status: { type: String, enum: ["Pending", "Paid", "Failed", "Refunded"], default: "Pending" },

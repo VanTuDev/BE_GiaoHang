@@ -476,3 +476,117 @@ export const unbanDriver = async (req, res) => {
       return res.status(500).json({ success: false, message: 'Lỗi mở cấm tài xế', error: error.message });
    }
 };
+
+// Admin: trả tiền cho tài xế (payout/withdrawal)
+export const payoutToDriver = async (req, res) => {
+  try {
+    const { driverId } = req.params;
+    const { amount, description } = req.body || {};
+    const payoutAmount = Math.round(Number(amount || 0));
+    if (!payoutAmount || payoutAmount <= 0) {
+      return res.status(400).json({ success: false, message: 'Số tiền không hợp lệ' });
+    }
+
+    const driver = await Driver.findById(driverId);
+    if (!driver) return res.status(404).json({ success: false, message: 'Không tìm thấy tài xế' });
+
+    if (driver.incomeBalance < payoutAmount) {
+      return res.status(400).json({ success: false, message: 'Số dư không đủ để chi trả' });
+    }
+
+    driver.incomeBalance -= payoutAmount;
+    await driver.save();
+
+    await DriverTransaction.create({
+      driverId: driver._id,
+      amount: payoutAmount,
+      fee: 0,
+      netAmount: payoutAmount,
+      type: 'Withdrawal',
+      status: 'Completed',
+      description: description || 'Admin chi trả về tài khoản tài xế',
+      paymentMethod: 'BankTransfer'
+    });
+
+    return res.json({ success: true, message: 'Đã chi trả cho tài xế', data: { balance: driver.incomeBalance } });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Lỗi chi trả', error: error.message });
+  }
+};
+
+// Admin: reset số dư tài xế và trừ 20%
+export const resetDriverBalanceWithPenalty = async (req, res) => {
+  try {
+    const { driverId } = req.params;
+    const driver = await Driver.findById(driverId);
+    if (!driver) return res.status(404).json({ success: false, message: 'Không tìm thấy tài xế' });
+
+    const current = driver.incomeBalance || 0;
+    if (current <= 0) {
+      return res.json({ success: true, message: 'Số dư đã bằng 0', data: { balance: 0 } });
+    }
+
+    const penalty = Math.round(current * 0.2);
+    const remain = current - penalty;
+
+    // Đưa số dư về 0 sau khi ghi nhận các bút toán
+    driver.incomeBalance = 0;
+    await driver.save();
+
+    if (penalty > 0) {
+      await DriverTransaction.create({
+        driverId: driver._id,
+        amount: penalty,
+        fee: 0,
+        netAmount: 0,
+        type: 'Penalty',
+        status: 'Completed',
+        description: 'Phí reset số dư 20%'
+      });
+    }
+
+    if (remain > 0) {
+      await DriverTransaction.create({
+        driverId: driver._id,
+        amount: remain,
+        fee: 0,
+        netAmount: remain,
+        type: 'Withdrawal',
+        status: 'Completed',
+        description: 'Reset số dư: chuyển phần còn lại cho tài xế'
+      });
+    }
+
+    return res.json({ success: true, message: 'Đã reset số dư và trừ 20%', data: { penalty, paidOut: remain } });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Lỗi reset số dư', error: error.message });
+  }
+};
+
+// Admin: thống kê doanh thu tài xế theo ngày/tuần/tháng
+export const getDriverRevenueStats = async (req, res) => {
+  try {
+    const { driverId } = req.params;
+    const { range = 'day', from, to } = req.query;
+
+    const driver = await Driver.findById(driverId);
+    if (!driver) return res.status(404).json({ success: false, message: 'Không tìm thấy tài xế' });
+
+    const fromDate = from ? new Date(from) : new Date(Date.now() - 30 * 24 * 3600 * 1000);
+    const toDate = to ? new Date(to) : new Date();
+
+    let dateFormat = '%Y-%m-%d';
+    if (range === 'week') dateFormat = '%G-%V';
+    if (range === 'month') dateFormat = '%Y-%m';
+
+    const data = await DriverTransaction.aggregate([
+      { $match: { driverId: driver._id, createdAt: { $gte: fromDate, $lte: toDate }, type: { $in: ['OrderEarning', 'Bonus'] } } },
+      { $group: { _id: { $dateToString: { format: dateFormat, date: '$createdAt' } }, totalAmount: { $sum: '$amount' }, totalNet: { $sum: '$netAmount' }, count: { $sum: 1 } } },
+      { $sort: { _id: 1 } }
+    ]);
+
+    return res.json({ success: true, data });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Lỗi thống kê doanh thu', error: error.message });
+  }
+};

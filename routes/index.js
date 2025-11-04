@@ -9,6 +9,8 @@ import driverRevenueRoutes from './driverRevenueRoutes.js';
 import uploadRoutes from './uploadRoutes.js';
 import feedbackRoutes from './feedbackRoutes.js';
 import violationRoutes from './violationRoutes.js';
+import paymentRoutes from './paymentRoutes.js';
+import vnpayRoutes from './vnpayRoutes.js';
 
 const router = express.Router();
 
@@ -23,5 +25,7 @@ router.use('/driver/revenue', driverRevenueRoutes);
 router.use('/upload', uploadRoutes);
 router.use('/feedback', feedbackRoutes);
 router.use('/violations', violationRoutes);
+router.use('/payments', paymentRoutes);
+router.use('/vnpay', vnpayRoutes);
 
 export default router;

@@ -9,7 +9,10 @@ import {
    getDriverDetail,
    getUserDetail,
    banDriver,
-   unbanDriver
+   unbanDriver,
+   payoutToDriver,
+   resetDriverBalanceWithPenalty,
+   getDriverRevenueStats
 } from '../controllers/adminController.js';
 
 const router = express.Router();
@@ -31,6 +34,15 @@ router.get('/drivers/:driverId', getDriverDetail);
 // Cấm/Mở cấm tài xế
 router.put('/drivers/:driverId/ban', banDriver);
 router.put('/drivers/:driverId/unban', unbanDriver);
+
+// Admin: chi trả cho tài xế
+router.post('/drivers/:driverId/payout', payoutToDriver);
+
+// Admin: reset số dư và trừ 20%
+router.post('/drivers/:driverId/reset-balance', resetDriverBalanceWithPenalty);
+
+// Admin: thống kê doanh thu tài xế theo ngày/tuần/tháng
+router.get('/drivers/:driverId/revenue', getDriverRevenueStats);
 
 // Quản lý đơn hàng
 router.get('/orders', getOrders);

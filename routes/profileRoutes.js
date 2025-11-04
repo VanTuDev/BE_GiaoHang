@@ -5,7 +5,8 @@ import {
    updateProfile,
    uploadAvatar,
    getDriverProfile,
-   updateServiceAreas
+   updateServiceAreas,
+   updateDriverBankInfo
 } from '../controllers/profileController.js';
 
 const router = express.Router();
@@ -24,5 +25,8 @@ router.get('/driver', authenticate, authorize(roles.DRIVER), getDriverProfile);
 
 // Cập nhật khu vực hoạt động của tài xế
 router.put('/driver/service-areas', authenticate, authorize(roles.DRIVER), updateServiceAreas);
+
+// Cập nhật thông tin ngân hàng của tài xế
+router.put('/driver/bank', authenticate, authorize(roles.DRIVER), updateDriverBankInfo);
 
 export default router;
