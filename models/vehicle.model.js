@@ -17,9 +17,9 @@ const vehicleSchema = new mongoose.Schema({
       required: true
    },
    licensePlate: { type: String, required: true },
-   maxWeightKg: { type: Number, default: 1000 },
+   maxWeightKg: { type: Number, default: 100 },
    // Giá do tài xế tự đặt: đơn vị VND/km
-   pricePerKm: { type: Number, default: 40000, min: 0 },
+   pricePerKm: { type: Number, default: 1000, min: 0 },
    vehicleDocs: [String],
    photoUrl: { type: String },
    status: { type: String, enum: ["Active", "Maintenance", "Inactive"], default: "Active" },
