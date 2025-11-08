@@ -240,7 +240,137 @@ export const getOrders = async (req, res) => {
    }
 };
 
-// Lấy báo cáo doanh thu
+// Lấy báo cáo doanh thu hệ thống (tổng tiền tài xế thu nhập và 20% phí)
+export const getSystemRevenueStats = async (req, res) => {
+   try {
+      const { period = 'month', startDate, endDate } = req.query;
+      
+      // Parse date range
+      let start, end;
+      if (startDate && endDate) {
+         start = new Date(startDate);
+         end = new Date(endDate);
+      } else {
+         // Mặc định: 6 tháng gần nhất
+         end = new Date();
+         start = new Date();
+         start.setMonth(start.getMonth() - 6);
+      }
+
+      // Group by period
+      let groupBy = {};
+      let dateFormat = '%Y-%m';
+      
+      // Sử dụng dateToUse field (đã được addFields ở bước sau)
+      if (period === 'day') {
+         dateFormat = '%Y-%m-%d';
+         groupBy = {
+            year: { $year: '$dateToUse' },
+            month: { $month: '$dateToUse' },
+            day: { $dayOfMonth: '$dateToUse' }
+         };
+      } else if (period === 'week') {
+         dateFormat = '%Y-W%V';
+         groupBy = {
+            year: { $year: '$dateToUse' },
+            week: { $week: '$dateToUse' }
+         };
+      } else if (period === 'month') {
+         dateFormat = '%Y-%m';
+         groupBy = {
+            year: { $year: '$dateToUse' },
+            month: { $month: '$dateToUse' }
+         };
+      } else if (period === 'year') {
+         dateFormat = '%Y';
+         groupBy = {
+            year: { $year: '$dateToUse' }
+         };
+      }
+
+      // Aggregate: Tổng tiền tài xế thu nhập (amount) và phí hệ thống (fee = 20%)
+      // Sử dụng transactionDate nếu có, nếu không thì dùng createdAt
+      const stats = await DriverTransaction.aggregate([
+         {
+            $match: {
+               type: 'OrderEarning',
+               status: 'Completed',
+               $or: [
+                  { transactionDate: { $gte: start, $lte: end } },
+                  { transactionDate: { $exists: false }, createdAt: { $gte: start, $lte: end } }
+               ]
+            }
+         },
+         {
+            $addFields: {
+               dateToUse: { $ifNull: ['$transactionDate', '$createdAt'] }
+            }
+         },
+         {
+            $group: {
+               _id: groupBy,
+               totalDriverRevenue: { $sum: '$amount' },  // Tổng tiền tài xế thu nhập
+               totalSystemRevenue: { $sum: '$fee' },      // Doanh thu hệ thống (20% phí)
+               totalDriverPayout: { $sum: '$netAmount' }, // Tiền tài xế thực nhận (80%)
+               totalOrders: { $sum: 1 }
+            }
+         },
+         { $sort: { '_id.year': 1, '_id.month': 1, '_id.day': 1, '_id.week': 1 } }
+      ]);
+
+      // Format labels
+      const formattedData = stats.map(item => {
+         let label = '';
+         if (period === 'day') {
+            label = `${item._id.day}/${item._id.month}/${item._id.year}`;
+         } else if (period === 'week') {
+            label = `T${item._id.week}/${item._id.year}`;
+         } else if (period === 'month') {
+            label = `T${item._id.month}/${item._id.year}`;
+         } else if (period === 'year') {
+            label = `${item._id.year}`;
+         }
+
+         return {
+            label,
+            period: item._id,
+            totalDriverRevenue: item.totalDriverRevenue || 0,  // Tổng tiền tài xế thu nhập
+            totalSystemRevenue: item.totalSystemRevenue || 0,  // Doanh thu hệ thống (20%)
+            totalDriverPayout: item.totalDriverPayout || 0,    // Tiền tài xế thực nhận (80%)
+            totalOrders: item.totalOrders || 0
+         };
+      });
+
+      // Tính tổng
+      const totals = formattedData.reduce((acc, cur) => ({
+         totalDriverRevenue: acc.totalDriverRevenue + cur.totalDriverRevenue,
+         totalSystemRevenue: acc.totalSystemRevenue + cur.totalSystemRevenue,
+         totalDriverPayout: acc.totalDriverPayout + cur.totalDriverPayout,
+         totalOrders: acc.totalOrders + cur.totalOrders
+      }), { totalDriverRevenue: 0, totalSystemRevenue: 0, totalDriverPayout: 0, totalOrders: 0 });
+
+      return res.json({
+         success: true,
+         data: formattedData,
+         totals,
+         meta: {
+            period,
+            startDate: start,
+            endDate: end
+         }
+      });
+
+   } catch (error) {
+      console.error('❌ Lỗi lấy thống kê doanh thu hệ thống:', error);
+      return res.status(500).json({
+         success: false,
+         message: 'Lỗi lấy thống kê doanh thu hệ thống',
+         error: error.message
+      });
+   }
+};
+
+// Lấy báo cáo doanh thu (giữ nguyên để tương thích)
 export const getRevenueReport = async (req, res) => {
    try {
       const { period = 'monthly', year, month } = req.query;
@@ -589,4 +719,127 @@ export const getDriverRevenueStats = async (req, res) => {
   } catch (error) {
     return res.status(500).json({ success: false, message: 'Lỗi thống kê doanh thu', error: error.message });
   }
+};
+
+// Admin: Lấy danh sách tài xế với doanh thu
+export const getDriversWithRevenue = async (req, res) => {
+   try {
+      const { status, page = 1, limit = 20, search, sortBy = 'revenue', sortOrder = 'desc' } = req.query;
+      const query = {};
+
+      if (status && ['Pending', 'Active', 'Rejected', 'Blocked'].includes(status)) {
+         query.status = status;
+      }
+
+      const pageNum = Math.max(parseInt(page) || 1, 1);
+      const limitNum = Math.min(Math.max(parseInt(limit) || 20, 1), 100);
+      const skip = (pageNum - 1) * limitNum;
+
+      // Lấy danh sách drivers
+      let drivers = await Driver.find(query)
+         .populate('userId', 'name email phone avatarUrl')
+         .sort({ createdAt: -1 })
+         .skip(skip)
+         .limit(limitNum);
+
+      // Lọc theo search nếu có
+      if (search) {
+         const searchRegex = new RegExp(search, 'i');
+         drivers = drivers.filter(driver =>
+            driver.userId && (
+               searchRegex.test(driver.userId.name) ||
+               searchRegex.test(driver.userId.email) ||
+               searchRegex.test(driver.userId.phone)
+            )
+         );
+      }
+
+      // Tính doanh thu cho từng driver
+      const driversWithRevenue = await Promise.all(
+         drivers.map(async (driver) => {
+            // Tính tổng doanh thu từ transactions
+            const revenueStats = await DriverTransaction.aggregate([
+               {
+                  $match: {
+                     driverId: driver._id,
+                     type: 'OrderEarning',
+                     status: 'Completed'
+                  }
+               },
+               {
+                  $group: {
+                     _id: null,
+                     totalRevenue: { $sum: '$amount' },      // Tổng tiền tài xế thu nhập
+                     totalSystemFee: { $sum: '$fee' },      // Doanh thu hệ thống (20%)
+                     totalDriverPayout: { $sum: '$netAmount' }, // Tiền tài xế thực nhận (80%)
+                     totalOrders: { $sum: 1 }
+                  }
+               }
+            ]);
+
+            const stats = revenueStats[0] || {
+               totalRevenue: 0,
+               totalSystemFee: 0,
+               totalDriverPayout: 0,
+               totalOrders: 0
+            };
+
+            return {
+               _id: driver._id,
+               userId: driver.userId,
+               name: driver.userId?.name || 'N/A',
+               email: driver.userId?.email || 'N/A',
+               phone: driver.userId?.phone || 'N/A',
+               avatarUrl: driver.userId?.avatarUrl,
+               status: driver.status,
+               rating: driver.rating,
+               totalTrips: driver.totalTrips,
+               incomeBalance: driver.incomeBalance || 0,
+               isOnline: driver.isOnline,
+               // Doanh thu
+               totalRevenue: stats.totalRevenue,
+               totalSystemFee: stats.totalSystemFee,
+               totalDriverPayout: stats.totalDriverPayout,
+               totalOrders: stats.totalOrders
+            };
+         })
+      );
+
+      // Sắp xếp theo sortBy
+      // Map sortBy từ frontend sang field name thực tế
+      const sortFieldMap = {
+         'revenue': 'totalRevenue',
+         'payout': 'totalDriverPayout',
+         'fee': 'totalSystemFee',
+         'orders': 'totalOrders',
+         'balance': 'incomeBalance'
+      };
+      const actualSortField = sortFieldMap[sortBy] || sortBy || 'totalRevenue';
+      
+      driversWithRevenue.sort((a, b) => {
+         const aValue = a[actualSortField] || 0;
+         const bValue = b[actualSortField] || 0;
+         return sortOrder === 'asc' ? aValue - bValue : bValue - aValue;
+      });
+
+      const total = await Driver.countDocuments(query);
+
+      return res.json({
+         success: true,
+         data: driversWithRevenue,
+         meta: {
+            page: pageNum,
+            limit: limitNum,
+            total,
+            totalPages: Math.ceil(total / limitNum)
+         }
+      });
+   } catch (error) {
+      console.error('❌ Lỗi lấy danh sách tài xế với doanh thu:', error);
+      return res.status(500).json({
+         success: false,
+         message: 'Lỗi lấy danh sách tài xế với doanh thu',
+         error: error.message
+      });
+   }
 };

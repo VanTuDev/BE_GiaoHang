@@ -26,6 +26,13 @@ const config = {
       apiKey: process.env.CLOUDINARY_API_KEY,
       apiSecret: process.env.CLOUDINARY_API_SECRET,
       url: process.env.CLOUDINARY_URL || ''
+   },
+   gemini: {
+      apiKey: process.env.GEMINI_API_KEY || ''
+   },
+   supabase: {
+      url: process.env.SUPABASE_URL,
+      key: process.env.SUPABASE_KEY
    }
 };
 

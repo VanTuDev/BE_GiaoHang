@@ -11,6 +11,7 @@ import feedbackRoutes from './feedbackRoutes.js';
 import violationRoutes from './violationRoutes.js';
 import paymentRoutes from './paymentRoutes.js';
 import vnpayRoutes from './vnpayRoutes.js';
+import aiRoutes from './aiRoutes.js';
 
 const router = express.Router();
 
@@ -27,5 +28,6 @@ router.use('/feedback', feedbackRoutes);
 router.use('/violations', violationRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/vnpay', vnpayRoutes);
+router.use('/ai', aiRoutes);
 
 export default router;

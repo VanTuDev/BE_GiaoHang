@@ -6,13 +6,15 @@ import {
    getDrivers,
    getOrders,
    getRevenueReport,
+   getSystemRevenueStats,
    getDriverDetail,
    getUserDetail,
    banDriver,
    unbanDriver,
    payoutToDriver,
    resetDriverBalanceWithPenalty,
-   getDriverRevenueStats
+   getDriverRevenueStats,
+   getDriversWithRevenue
 } from '../controllers/adminController.js';
 
 const router = express.Router();
@@ -47,7 +49,13 @@ router.get('/drivers/:driverId/revenue', getDriverRevenueStats);
 // Quản lý đơn hàng
 router.get('/orders', getOrders);
 
-// Báo cáo doanh thu
+// Báo cáo doanh thu (giữ nguyên để tương thích)
 router.get('/revenue', getRevenueReport);
+
+// Thống kê doanh thu hệ thống (tổng tiền tài xế thu nhập và 20% phí)
+router.get('/revenue/system', getSystemRevenueStats);
+
+// Danh sách tài xế với doanh thu
+router.get('/drivers/revenue', getDriversWithRevenue);
 
 export default router;
