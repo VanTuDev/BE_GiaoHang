@@ -117,6 +117,16 @@ const orderSchema = new mongoose.Schema({
    // Phương thức thanh toán
    paymentMethod: { type: String, enum: ["Cash", "Banking", "Wallet"], default: "Cash" },
 
+   // Người trả tiền: "sender" (người đặt trả) hoặc "receiver" (người nhận trả)
+   // - sender: Thanh toán trước khi lấy hàng thành công (status = PickedUp)
+   // - receiver: Thanh toán trước khi giao hàng thành công (status = Delivered)
+   paymentBy: {
+      type: String,
+      enum: ["sender", "receiver"],
+      default: "sender",
+      required: true
+   },
+
    // Ghi chú từ khách hàng
    customerNote: { type: String },
 

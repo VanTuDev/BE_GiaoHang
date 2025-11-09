@@ -53,7 +53,7 @@ export const createOrder = async (req, res) => {
          body: req.body
       });
 
-      const { pickupAddress, dropoffAddress, items, customerNote, paymentMethod = 'Cash' } = req.body;
+      const { pickupAddress, dropoffAddress, items, customerNote, paymentMethod = 'Cash', paymentBy = 'sender' } = req.body;
 
       console.log('📋 [createOrder] Dữ liệu đơn hàng:', {
          pickupAddress,
@@ -217,6 +217,7 @@ export const createOrder = async (req, res) => {
          totalPrice,
          customerNote,
          paymentMethod,
+         paymentBy, // Người trả tiền: "sender" hoặc "receiver"
          paymentStatus: 'Pending',
          status: 'Created' // Đảm bảo order status = Created
       });
@@ -445,13 +446,41 @@ export const updateOrderItemStatus = async (req, res) => {
          return res.status(404).json({ success: false, message: 'Không tìm thấy item phù hợp' });
       }
 
-      // Nếu đã giao hàng thành công -> Tạo giao dịch thu nhập cho tài xế
-      if (status === 'Delivered') {
-         const item = order.items.find(i => String(i._id) === String(itemId));
-         if (item && item.priceBreakdown && item.priceBreakdown.total) {
+      // Xử lý thanh toán và tạo giao dịch thu nhập cho tài xế
+      // Logic thanh toán:
+      // - Nếu paymentBy = "sender": Thanh toán khi status = "PickedUp" (đã lấy hàng)
+      // - Nếu paymentBy = "receiver": Thanh toán khi status = "Delivered" (đã giao hàng)
+      const item = order.items.find(i => String(i._id) === String(itemId));
+      const shouldProcessPayment =
+         (order.paymentBy === 'sender' && status === 'PickedUp') ||
+         (order.paymentBy === 'receiver' && status === 'Delivered');
+
+      if (shouldProcessPayment && item && item.priceBreakdown && item.priceBreakdown.total) {
+         // Kiểm tra xem đã có giao dịch cho item này chưa (tránh thanh toán trùng lặp)
+         const existingTransaction = await DriverTransaction.findOne({
+            orderId: order._id,
+            orderItemId: itemId,
+            type: 'OrderEarning',
+            status: 'Completed'
+         });
+
+         if (existingTransaction) {
+            console.log('⚠️ Giao dịch đã tồn tại cho item này, bỏ qua thanh toán:', {
+               orderId: order._id,
+               itemId,
+               transactionId: existingTransaction._id
+            });
+         } else {
             const amount = item.priceBreakdown.total;
             const fee = Math.round(amount * 0.2); // 20% hoa hồng cho hệ thống
             const netAmount = amount - fee; // Số tiền tài xế nhận được
+
+            // Cập nhật trạng thái thanh toán của đơn hàng (chỉ cập nhật nếu chưa Paid)
+            if (order.paymentStatus !== 'Paid') {
+               await Order.findByIdAndUpdate(order._id, {
+                  paymentStatus: 'Paid'
+               });
+            }
 
             // Tạo giao dịch thu nhập
             await DriverTransaction.create({
@@ -463,7 +492,7 @@ export const updateOrderItemStatus = async (req, res) => {
                netAmount,
                type: 'OrderEarning',
                status: 'Completed',
-               description: `Thu nhập từ đơn hàng #${order._id}`
+               description: `Thu nhập từ đơn hàng #${order._id} (${order.paymentBy === 'sender' ? 'Người đặt trả' : 'Người nhận trả'})`
             });
 
             // Cập nhật số dư và số chuyến của tài xế
@@ -471,8 +500,10 @@ export const updateOrderItemStatus = async (req, res) => {
                $inc: { incomeBalance: netAmount, totalTrips: 1 }
             });
 
-            console.log('💰 Đã tạo giao dịch thu nhập cho tài xế:', {
+            console.log('💰 Đã xử lý thanh toán và tạo giao dịch thu nhập cho tài xế:', {
                driverId: driver._id,
+               paymentBy: order.paymentBy,
+               status,
                amount,
                netAmount
             });
@@ -918,6 +949,13 @@ export const getAvailableOrders = async (req, res) => {
             console.error(`❌ Lỗi khi debug orders:`, debugError);
          }
       }
+
+      // Thêm cache-control headers để tránh cache (304 Not Modified)
+      res.set({
+         'Cache-Control': 'no-cache, no-store, must-revalidate',
+         'Pragma': 'no-cache',
+         'Expires': '0'
+      });
 
       return res.json({
          success: true,
