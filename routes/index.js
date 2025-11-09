@@ -12,6 +12,7 @@ import violationRoutes from './violationRoutes.js';
 import paymentRoutes from './paymentRoutes.js';
 import vnpayRoutes from './vnpayRoutes.js';
 import aiRoutes from './aiRoutes.js';
+import withdrawalRoutes from './withdrawalRoutes.js';
 
 const router = express.Router();
 
@@ -29,5 +30,6 @@ router.use('/violations', violationRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/vnpay', vnpayRoutes);
 router.use('/ai', aiRoutes);
+router.use('/', withdrawalRoutes); // Withdrawal routes (driver và admin)
 
 export default router;

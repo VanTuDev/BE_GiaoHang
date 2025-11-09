@@ -16,6 +16,14 @@ import {
    getDriverRevenueStats,
    getDriversWithRevenue
 } from '../controllers/adminController.js';
+import {
+   getAllWithdrawalRequests,
+   getWithdrawalRequestDetail,
+   approveWithdrawalRequest,
+   rejectWithdrawalRequest,
+   completeWithdrawalRequest,
+   getWithdrawalStats
+} from '../controllers/adminWithdrawalController.js';
 
 const router = express.Router();
 
@@ -57,5 +65,55 @@ router.get('/revenue/system', getSystemRevenueStats);
 
 // Danh sách tài xế với doanh thu
 router.get('/drivers/revenue', getDriversWithRevenue);
+
+// ============================================
+// QUẢN LÝ YÊU CẦU RÚT TIỀN CỦA TÀI XẾ
+// ============================================
+
+/**
+ * ADMIN: XEM DANH SÁCH TẤT CẢ YÊU CẦU RÚT TIỀN
+ * GET /api/admin/withdrawals
+ * Query: ?page=1&limit=20&status=Pending&driverId=xxx&bankAccountConfirmed=true
+ */
+router.get('/withdrawals', getAllWithdrawalRequests);
+
+/**
+ * ADMIN: THỐNG KÊ YÊU CẦU RÚT TIỀN
+ * GET /api/admin/withdrawals/stats
+ * Query: ?startDate=2024-01-01&endDate=2024-12-31
+ */
+router.get('/withdrawals/stats', getWithdrawalStats);
+
+/**
+ * ADMIN: XEM CHI TIẾT YÊU CẦU RÚT TIỀN
+ * GET /api/admin/withdrawals/:requestId
+ */
+router.get('/withdrawals/:requestId', getWithdrawalRequestDetail);
+
+/**
+ * ADMIN: CHẤP THUẬN YÊU CẦU RÚT TIỀN
+ * POST /api/admin/withdrawals/:requestId/approve
+ * Body: { adminNote? }
+ * 
+ * Logic:
+ * - Trừ tiền từ driver.incomeBalance
+ * - Tạo DriverTransaction với type: 'Withdrawal'
+ * - Số tiền thực nhận = 80%, phí hệ thống = 20%
+ */
+router.post('/withdrawals/:requestId/approve', approveWithdrawalRequest);
+
+/**
+ * ADMIN: TỪ CHỐI YÊU CẦU RÚT TIỀN
+ * POST /api/admin/withdrawals/:requestId/reject
+ * Body: { rejectionReason, adminNote? }
+ */
+router.post('/withdrawals/:requestId/reject', rejectWithdrawalRequest);
+
+/**
+ * ADMIN: ĐÁNH DẤU HOÀN THÀNH CHUYỂN TIỀN
+ * POST /api/admin/withdrawals/:requestId/complete
+ * Body: { adminNote? }
+ */
+router.post('/withdrawals/:requestId/complete', completeWithdrawalRequest);
 
 export default router;

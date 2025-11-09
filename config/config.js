@@ -9,7 +9,7 @@ const toNumber = (value, fallback) => {
 };
 
 const config = {
-   port: toNumber(process.env.PORT || process.env.PORT_DEV, 5000),
+   port: toNumber(process.env.PORT || process.env.PORT_DEV, 8080),
    clientURL: process.env.CLIENT_URL,
    mongoURI: process.env.MONGODB_URI,
    jwtSecret: process.env.JWT_SECRET,

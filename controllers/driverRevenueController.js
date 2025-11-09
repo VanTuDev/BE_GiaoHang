@@ -333,7 +333,7 @@ export const getDriverRevenueOverview = async (req, res) => {
             monthly: monthlyStats[0] || { monthlyOrders: 0, monthlyRevenue: 0, monthlyPayout: 0 },
             yearly: yearlyStats[0] || { yearlyOrders: 0, yearlyRevenue: 0, yearlyPayout: 0 },
             recentTransactions,
-            balance: driver.balance || 0
+            balance: driver.incomeBalance || 0
          }
       });
 
