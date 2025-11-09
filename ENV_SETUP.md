@@ -9,7 +9,9 @@ Tạo file `.env` trong thư mục `BE_GiaoHangDaNang` với nội dung:
 PORT=8080
 
 # MongoDB Connection String
-MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/database?retryWrites=true&w=majority
+# Format: mongodb+srv://<username>:<password>@<cluster>.mongodb.net/<database>?retryWrites=true&w=majority
+# Hoặc local: mongodb://localhost:27017/<database>
+MONGODB_URI=your_mongodb_connection_string_here
 
 # JWT Secrets (tối thiểu 32 ký tự)
 JWT_SECRET=your_jwt_secret_key_min_32_chars

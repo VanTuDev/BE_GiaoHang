@@ -12,7 +12,7 @@
 
 Tạo MongoDB database và lấy connection string:
 ```
-mongodb+srv://user:password@cluster.mongodb.net/giaohang
+mongodb+srv://<username>:<password>@<cluster>.mongodb.net/<database>?retryWrites=true&w=majority
 ```
 
 ### 2. Tạo Web Service trên Render

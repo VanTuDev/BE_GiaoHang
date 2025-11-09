@@ -21,8 +21,10 @@ npm install @google/generative-ai
 Mở file `.env` trong thư mục `BE_GiaoHangDaNang` và thêm dòng sau:
 
 ```env
-GEMINI_API_KEY=AIzaSyD5hq1IcDm6C4hN0SGx2fx9FWzwY9zhWOI
+GEMINI_API_KEY=your_gemini_api_key_here
 ```
+
+**Lấy API Key từ Google AI Studio**: https://makersuite.google.com/app/apikey
 
 **Lưu ý**: 
 - File `.env` nằm ở `BE_GiaoHangDaNang/.env`
