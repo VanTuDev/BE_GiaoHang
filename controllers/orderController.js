@@ -53,7 +53,16 @@ export const createOrder = async (req, res) => {
          body: req.body
       });
 
-      const { pickupAddress, dropoffAddress, items, customerNote, paymentMethod = 'Cash', paymentBy = 'sender' } = req.body;
+      const { 
+         pickupAddress, 
+         dropoffAddress, 
+         items, 
+         customerNote, 
+         paymentMethod = 'Cash', 
+         paymentBy = 'sender',
+         pickupLocation,
+         dropoffLocation
+      } = req.body;
 
       console.log('📋 [createOrder] Dữ liệu đơn hàng:', {
          pickupAddress,
@@ -209,7 +218,7 @@ export const createOrder = async (req, res) => {
          status: 'Created'
       });
 
-      const order = await Order.create({
+      const orderData = {
          customerId: req.user._id,
          pickupAddress,
          dropoffAddress,
@@ -220,7 +229,23 @@ export const createOrder = async (req, res) => {
          paymentBy, // Người trả tiền: "sender" hoặc "receiver"
          paymentStatus: 'Pending',
          status: 'Created' // Đảm bảo order status = Created
-      });
+      };
+
+      // Thêm tọa độ nếu có (để hiển thị trên bản đồ)
+      if (pickupLocation && pickupLocation.coordinates && pickupLocation.coordinates.length === 2) {
+         orderData.pickupLocation = {
+            type: 'Point',
+            coordinates: pickupLocation.coordinates // [longitude, latitude]
+         };
+      }
+      if (dropoffLocation && dropoffLocation.coordinates && dropoffLocation.coordinates.length === 2) {
+         orderData.dropoffLocation = {
+            type: 'Point',
+            coordinates: dropoffLocation.coordinates // [longitude, latitude]
+         };
+      }
+
+      const order = await Order.create(orderData);
 
       console.log('✅ [createOrder] Đơn hàng đã được tạo trong database:', {
          orderId: order._id,
