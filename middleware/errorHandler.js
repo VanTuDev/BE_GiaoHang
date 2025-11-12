@@ -3,9 +3,27 @@ export const notFound = (req, res, next) => {
 };
 
 export const errorHandler = (err, req, res, next) => {
+   // Log chi tiết lỗi để debug
+   console.error('❌ [ERROR HANDLER]', {
+      message: err.message,
+      stack: err.stack,
+      url: req.url,
+      method: req.method,
+      status: err.status || 500
+   });
+
    const status = err.status || 500;
-   const message = err.message || 'Lỗi máy chủ';
-   return res.status(status).json({ success: false, message });
+   // Trong production, không trả về stack trace
+   const message = process.env.NODE_ENV === 'production'
+      ? (err.message || 'Lỗi máy chủ')
+      : (err.message || 'Lỗi máy chủ');
+
+   return res.status(status).json({
+      success: false,
+      message,
+      // Chỉ trả về error detail trong development
+      ...(process.env.NODE_ENV !== 'production' && { error: err.message, stack: err.stack })
+   });
 };
 
 

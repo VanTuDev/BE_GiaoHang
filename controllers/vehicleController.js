@@ -138,7 +138,7 @@ export const addVehicle = async (req, res) => {
          return res.status(404).json({ success: false, message: 'Không tìm thấy hồ sơ tài xế' });
       }
 
-      const { type, licensePlate, maxWeightKg, description, features, photoUrl } = req.body;
+      const { type, licensePlate, maxWeightKg, description, features, photoUrl, pricePerKm } = req.body;
 
       if (!type || !licensePlate) {
          return res.status(400).json({ success: false, message: 'Thiếu thông tin loại xe hoặc biển số' });
@@ -160,6 +160,7 @@ export const addVehicle = async (req, res) => {
          photoUrl: finalPhotoUrl,
          description,
          features: Array.isArray(features) ? features : (features ? [features] : []),
+         pricePerKm: Number(pricePerKm) > 0 ? Math.round(Number(pricePerKm)) : undefined,
          status: 'Active'
       });
 
@@ -185,7 +186,7 @@ export const updateVehicle = async (req, res) => {
          return res.status(403).json({ success: false, message: 'Không có quyền cập nhật xe này' });
       }
 
-      const { type, licensePlate, maxWeightKg, description, features, status, photoUrl } = req.body;
+      const { type, licensePlate, maxWeightKg, description, features, status, photoUrl, pricePerKm } = req.body;
       const updateData = {};
 
       if (type) updateData.type = type;
@@ -194,6 +195,7 @@ export const updateVehicle = async (req, res) => {
       if (description) updateData.description = description;
       if (features) updateData.features = Array.isArray(features) ? features : [features];
       if (status) updateData.status = status;
+      if (pricePerKm !== undefined) updateData.pricePerKm = Number(pricePerKm) > 0 ? Math.round(Number(pricePerKm)) : 0;
 
       // Sử dụng photoUrl từ request.body nếu có
       if (photoUrl) {

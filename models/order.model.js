@@ -1,6 +1,9 @@
 import mongoose from "mongoose";
 
-// Item trong đơn: mỗi item có thể được 1 tài xế nhận riêng
+/**
+ * Item trong đơn hàng: mỗi mục có thể được một tài xế nhận riêng.
+ * Lưu lại trạng thái theo từng bước xử lý và các mốc thời gian quan trọng.
+ */
 const orderItemSchema = new mongoose.Schema({
    vehicleType: { type: String, required: true },
    weightKg: { type: Number, required: true },
@@ -25,10 +28,10 @@ const orderItemSchema = new mongoose.Schema({
    deliveredAt: { type: Date },
    cancelledAt: { type: Date },
    cancelReason: { type: String },
-   itemPhotos: [String], // Hình ảnh đơn hàng
+   itemPhotos: [String]
 }, { _id: true, timestamps: true });
 
-// Đơn hàng nhiều item
+// Đơn hàng gồm nhiều item, mỗi item có thể do tài xế khác nhau phụ trách.
 const orderSchema = new mongoose.Schema({
    customerId: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
    pickupAddress: { type: String, required: true },
@@ -46,6 +49,13 @@ const orderSchema = new mongoose.Schema({
    paymentId: { type: mongoose.Schema.Types.ObjectId, ref: "Payment" },
    paymentStatus: { type: String, enum: ["Pending", "Paid", "Failed"], default: "Pending" },
    paymentMethod: { type: String, enum: ["Cash", "Banking", "Wallet"], default: "Cash" },
+   // Người thanh toán: người gửi (sender) hoặc người nhận (receiver)
+   paymentBy: {
+      type: String,
+      enum: ["sender", "receiver"],
+      default: "sender",
+      required: true
+   },
    customerNote: { type: String },
    status: {
       type: String,
@@ -54,8 +64,9 @@ const orderSchema = new mongoose.Schema({
    }
 }, { timestamps: true });
 
-// Tạo index cho vị trí để tìm kiếm dựa trên khoảng cách
+// Index để tìm kiếm theo vị trí
 orderSchema.index({ pickupLocation: '2dsphere' });
 orderSchema.index({ dropoffLocation: '2dsphere' });
 
 export default mongoose.model("Order", orderSchema);
+

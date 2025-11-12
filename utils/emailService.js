@@ -192,3 +192,159 @@ export const sendDriverApprovedEmail = async (email, name) => {
    }
 };
 
+// Gửi email thông báo tài xế bị cấm
+export const sendDriverBannedEmail = async (email, name, reason, banDuration) => {
+   try {
+      if (!config.email.user || !config.email.pass) {
+         console.log(`[TEST MODE] Driver banned email for ${email} (${name})`);
+         return { success: false, error: 'Email chưa được cấu hình' };
+      }
+
+      const mailOptions = {
+         from: `"Giao Hàng Đà Nẵng" <${config.email.user}>`,
+         to: email,
+         subject: '⚠️ Thông báo tài khoản bị tạm khóa',
+         html: `
+         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ff0000; border-radius: 5px; background-color: #fff5f5;">
+            <div style="background-color: #ff0000; color: white; padding: 15px; text-align: center; border-radius: 5px 5px 0 0; margin: -20px -20px 20px -20px;">
+               <h2 style="margin: 0;">⚠️ THÔNG BÁO QUAN TRỌNG</h2>
+            </div>
+            
+            <p>Kính gửi: <strong>${name}</strong>,</p>
+            
+            <p style="color: #d32f2f;">Tài khoản tài xế của bạn đã bị <strong>TẠM KHÓA</strong> do vi phạm quy định của hệ thống.</p>
+            
+            <div style="background-color: #fff; padding: 15px; border-left: 4px solid #ff0000; margin: 20px 0;">
+               <h3 style="color: #d32f2f; margin-top: 0;">Lý do:</h3>
+               <p style="margin: 10px 0;">${reason}</p>
+               
+               ${banDuration ? `
+               <h3 style="color: #d32f2f; margin-top: 15px;">Thời gian khóa:</h3>
+               <p style="margin: 10px 0;">${banDuration}</p>
+               ` : ''}
+            </div>
+            
+            <div style="background-color: #e3f2fd; padding: 15px; border-radius: 5px; margin: 20px 0;">
+               <h3 style="color: #1976d2; margin-top: 0;">📋 Hậu quả:</h3>
+               <ul style="margin: 10px 0; padding-left: 20px;">
+                  <li>Bạn không thể nhận đơn hàng mới</li>
+                  <li>Bạn không thể truy cập các tính năng tài xế</li>
+                  <li>Tài khoản sẽ bị đánh dấu trạng thái "Blocked"</li>
+               </ul>
+            </div>
+            
+            <div style="background-color: #fff3e0; padding: 15px; border-radius: 5px; margin: 20px 0;">
+               <h3 style="color: #f57c00; margin-top: 0;">📞 Liên hệ hỗ trợ:</h3>
+               <p style="margin: 10px 0;">Nếu bạn có thắc mắc hoặc muốn khiếu nại, vui lòng liên hệ với chúng tôi qua:</p>
+               <ul style="margin: 10px 0; padding-left: 20px;">
+                  <li><strong>Fanpage:</strong> <a href="https://facebook.com/giaohangdanang" target="_blank">Giao Hàng Đà Nẵng</a></li>
+                  <li><strong>Hotline:</strong> 1900-xxxx</li>
+                  <li><strong>Email:</strong> support@giaohangdanang.com</li>
+               </ul>
+            </div>
+            
+            <p style="color: #666; font-size: 14px; margin-top: 20px;">
+               Chúng tôi rất tiếc vì sự bất tiện này. Hãy tuân thủ quy định để đảm bảo quyền lợi cho cả tài xế và khách hàng.
+            </p>
+            
+            <p style="margin-top: 30px; font-size: 12px; color: #777; border-top: 1px solid #eee; padding-top: 15px;">
+               © ${new Date().getFullYear()} Giao Hàng Đà Nẵng. Tất cả các quyền đã được bảo lưu.
+            </p>
+         </div>
+         `
+      };
+
+      const info = await transporter.sendMail(mailOptions);
+      console.log('✅ Email thông báo cấm tài xế đã được gửi:', info.messageId);
+      return { success: true };
+   } catch (error) {
+      console.error('❌ Lỗi gửi email thông báo cấm:', error);
+      return { success: false, error: error.message };
+   }
+};
+
+// Gửi email cảm ơn khách hàng sau khi admin xử lý báo cáo
+export const sendReportResolvedEmail = async (email, customerName, violationType, resolution) => {
+   try {
+      if (!config.email.user || !config.email.pass) {
+         console.log(`[TEST MODE] Report resolved email for ${email}`);
+         return { success: false, error: 'Email chưa được cấu hình' };
+      }
+
+      const violationLabels = {
+         LatePickup: 'Trễ lấy hàng',
+         LateDelivery: 'Trễ giao hàng',
+         RudeBehavior: 'Thái độ không tốt',
+         DamagedGoods: 'Làm hỏng hàng hóa',
+         Overcharging: 'Tính phí quá cao',
+         UnsafeDriving: 'Lái xe không an toàn',
+         NoShow: 'Không đến đúng giờ',
+         Other: 'Khác'
+      };
+
+      const mailOptions = {
+         from: `"Giao Hàng Đà Nẵng" <${config.email.user}>`,
+         to: email,
+         subject: '✅ Báo cáo của bạn đã được xử lý',
+         html: `
+         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #4CAF50; border-radius: 5px;">
+            <div style="background-color: #4CAF50; color: white; padding: 15px; text-align: center; border-radius: 5px 5px 0 0; margin: -20px -20px 20px -20px;">
+               <h2 style="margin: 0;">✅ CẢM ƠN BẠN ĐÃ PHẢN HỒI</h2>
+            </div>
+            
+            <p>Kính gửi: <strong>${customerName}</strong>,</p>
+            
+            <p>Cảm ơn bạn đã gửi báo cáo vi phạm cho chúng tôi. Báo cáo của bạn đã được xem xét và xử lý.</p>
+            
+            <div style="background-color: #f5f5f5; padding: 15px; border-left: 4px solid #4CAF50; margin: 20px 0;">
+               <h3 style="color: #333; margin-top: 0;">📋 Thông tin báo cáo:</h3>
+               <p style="margin: 10px 0;"><strong>Loại vi phạm:</strong> ${violationLabels[violationType] || violationType}</p>
+               <p style="margin: 10px 0;"><strong>Kết quả xử lý:</strong> ${resolution}</p>
+            </div>
+            
+            <div style="background-color: #e3f2fd; padding: 15px; border-radius: 5px; margin: 20px 0;">
+               <h3 style="color: #1976d2; margin-top: 0;">🎯 Cam kết của chúng tôi:</h3>
+               <ul style="margin: 10px 0; padding-left: 20px;">
+                  <li>Xử lý nghiêm túc mọi vi phạm</li>
+                  <li>Đảm bảo chất lượng dịch vụ tốt nhất</li>
+                  <li>Bảo vệ quyền lợi khách hàng</li>
+                  <li>Không ngừng cải thiện dịch vụ</li>
+               </ul>
+            </div>
+            
+            <div style="background-color: #fff3e0; padding: 15px; border-radius: 5px; margin: 20px 0;">
+               <h3 style="color: #f57c00; margin-top: 0;">📞 Cần hỗ trợ thêm?</h3>
+               <p style="margin: 10px 0;">Nếu bạn cần hỗ trợ thêm, vui lòng liên hệ với chúng tôi qua:</p>
+               <ul style="margin: 10px 0; padding-left: 20px;">
+                  <li><strong>Fanpage:</strong> <a href="https://facebook.com/giaohangdanang" target="_blank" style="color: #1976d2;">Giao Hàng Đà Nẵng</a></li>
+                  <li><strong>Hotline:</strong> 1900-xxxx</li>
+                  <li><strong>Email:</strong> support@giaohangdanang.com</li>
+               </ul>
+            </div>
+            
+            <div style="text-align: center; margin: 30px 0;">
+               <a href="${config.clientURL}/user/orders" style="background-color: #4CAF50; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; display: inline-block;">
+                  Xem đơn hàng của tôi
+               </a>
+            </div>
+            
+            <p style="color: #666; font-size: 14px; text-align: center;">
+               Cảm ơn bạn đã tin tưởng và sử dụng dịch vụ của chúng tôi! 🙏
+            </p>
+            
+            <p style="margin-top: 30px; font-size: 12px; color: #777; border-top: 1px solid #eee; padding-top: 15px; text-align: center;">
+               © ${new Date().getFullYear()} Giao Hàng Đà Nẵng. Tất cả các quyền đã được bảo lưu.
+            </p>
+         </div>
+         `
+      };
+
+      const info = await transporter.sendMail(mailOptions);
+      console.log('✅ Email cảm ơn khách hàng đã được gửi:', info.messageId);
+      return { success: true };
+   } catch (error) {
+      console.error('❌ Lỗi gửi email cảm ơn:', error);
+      return { success: false, error: error.message };
+   }
+};
+

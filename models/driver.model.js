@@ -11,7 +11,12 @@ const driverSchema = new mongoose.Schema({
    isOnline: { type: Boolean, default: false },
    lastOnlineAt: { type: Date },
    avatarUrl: { type: String },
-   serviceAreas: { type: [String], default: [] } // Danh sách quận/huyện hoạt động
+   serviceAreas: { type: [String], default: [] }, // Danh sách quận/huyện hoạt động
+   // Thông tin ngân hàng để nhận tiền
+   bankAccountName: { type: String },
+   bankAccountNumber: { type: String },
+   bankName: { type: String },
+   bankCode: { type: String }
 }, { timestamps: true });
 
 export default mongoose.model("Driver", driverSchema);

@@ -21,7 +21,7 @@ router.post('/', authenticate, authorize(roles.CUSTOMER), createOrder);
 // Customer lấy danh sách đơn
 router.get('/my-orders', authenticate, authorize(roles.CUSTOMER), getCustomerOrders);
 
-// Customer huỷ đơn hàng
+// Khách hàng: Hủy đơn hàng
 router.put('/:orderId/cancel', authenticate, authorize(roles.CUSTOMER), cancelOrder);
 
 // Customer cập nhật bảo hiểm đơn hàng
@@ -36,7 +36,7 @@ router.get('/driver/my-orders', authenticate, authorize(roles.DRIVER), getDriver
 // Driver lấy danh sách đơn có sẵn để nhận
 router.get('/driver/available', authenticate, authorize(roles.DRIVER), getAvailableOrders);
 
-// Driver nhận item trong đơn
+// Driver: Nhận đơn hàng
 router.put('/:orderId/items/:itemId/accept', authenticate, authorize(roles.DRIVER), acceptOrderItem);
 
 // Driver cập nhật trạng thái item

@@ -4,8 +4,10 @@ import {
    createFeedback,
    getDriverFeedbacks,
    getCustomerFeedbacks,
+   getOrderFeedbacks,
    getAllFeedbacks,
-   updateFeedbackStatus
+   updateFeedbackStatus,
+   respondToFeedback
 } from '../controllers/feedbackController.js';
 
 const router = express.Router();
@@ -19,10 +21,16 @@ router.get('/my-feedbacks', authenticate, authorize(roles.CUSTOMER), getCustomer
 // Public: Lấy đánh giá của driver (không cần auth)
 router.get('/driver/:driverId', getDriverFeedbacks);
 
+// Public: Lấy đánh giá của đơn hàng (cho tài xế xem feedback)
+router.get('/order/:orderId', authenticate, getOrderFeedbacks);
+
 // Admin: Lấy tất cả đánh giá
 router.get('/admin/all', authenticate, authorize(roles.ADMIN), getAllFeedbacks);
 
 // Admin: Cập nhật trạng thái đánh giá
 router.put('/admin/:feedbackId/status', authenticate, authorize(roles.ADMIN), updateFeedbackStatus);
+
+// Driver: Phản hồi đánh giá
+router.put('/:feedbackId/respond', authenticate, authorize(roles.DRIVER), respondToFeedback);
 
 export default router;

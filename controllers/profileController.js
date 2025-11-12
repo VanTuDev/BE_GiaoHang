@@ -140,3 +140,29 @@ export const updateServiceAreas = async (req, res) => {
       return res.status(500).json({ success: false, message: 'Lỗi khi cập nhật khu vực hoạt động', error: error.message });
    }
 };
+
+// Cập nhật thông tin ngân hàng của tài xế
+export const updateDriverBankInfo = async (req, res) => {
+   try {
+      const userId = req.user._id;
+      const { bankAccountName, bankAccountNumber, bankName, bankCode } = req.body || {};
+
+      if (!bankAccountName || !bankAccountNumber || !bankName) {
+         return res.status(400).json({ success: false, message: 'Thiếu thông tin ngân hàng bắt buộc' });
+      }
+
+      const updatedDriver = await Driver.findOneAndUpdate(
+         { userId },
+         { $set: { bankAccountName, bankAccountNumber, bankName, bankCode } },
+         { new: true }
+      );
+
+      if (!updatedDriver) {
+         return res.status(404).json({ success: false, message: 'Không tìm thấy thông tin tài xế' });
+      }
+
+      return res.json({ success: true, data: updatedDriver, message: 'Cập nhật thông tin ngân hàng thành công' });
+   } catch (error) {
+      return res.status(500).json({ success: false, message: 'Lỗi khi cập nhật thông tin ngân hàng', error: error.message });
+   }
+};
