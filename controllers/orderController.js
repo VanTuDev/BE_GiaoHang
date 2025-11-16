@@ -105,15 +105,16 @@ export const createOrder = async (req, res) => {
          });
 
          // Validate thông tin item
-         if (!vehicleType || !weightKg || !distanceKm) {
+         // vehicleType có thể null (theo luồng mới không cần chọn loại xe cụ thể)
+         if (!weightKg || !distanceKm) {
             console.log(`❌ [createOrder] Item ${idx + 1} thiếu thông tin:`, { vehicleType, weightKg, distanceKm });
-            return res.status(400).json({ success: false, message: 'Item thiếu vehicleType/weightKg/distanceKm' });
+            return res.status(400).json({ success: false, message: 'Item thiếu weightKg hoặc distanceKm' });
          }
 
-         // Lấy pricePerKm từ request hoặc từ xe
+         // Lấy pricePerKm từ request hoặc tính theo loại xe
          let finalPricePerKm = null;
          if (pricePerKm && pricePerKm > 0) {
-            // Ưu tiên dùng pricePerKm từ request (từ xe khách hàng chọn)
+            // Ưu tiên dùng pricePerKm từ request
             finalPricePerKm = Number(pricePerKm);
             console.log(`  💰 [createOrder] Sử dụng pricePerKm từ request: ${finalPricePerKm}`);
          } else if (vehicleId) {
@@ -125,33 +126,27 @@ export const createOrder = async (req, res) => {
             }
          }
 
-         // Kiểm tra có xe phù hợp với yêu cầu không
-         console.log(`  🔍 [createOrder] Tìm xe phù hợp: type=${vehicleType}, weightKg=${weightKg}`);
-         const anyVehicle = await Vehicle.findOne({
-            type: vehicleType,
-            maxWeightKg: { $gte: weightKg },
-            status: 'Active'
-         });
-         if (!anyVehicle) {
-            console.log(`❌ [createOrder] Không tìm thấy xe phù hợp cho item ${idx + 1}`);
-            return res.status(400).json({
-               success: false,
-               message: `Không có xe phù hợp cho trọng lượng ${weightKg}kg (type ${vehicleType})`
-            });
+         // Nếu chưa có pricePerKm, tính giá mặc định theo loại xe và trọng lượng
+         if (!finalPricePerKm || finalPricePerKm <= 0) {
+            // Tính giá mặc định dựa trên trọng lượng (tấn)
+            const ton = weightKg / 1000;
+            if (ton <= 1) {
+               finalPricePerKm = 40000;
+            } else if (ton <= 3) {
+               finalPricePerKm = 60000;
+            } else if (ton <= 5) {
+               finalPricePerKm = 80000;
+            } else if (ton <= 10) {
+               finalPricePerKm = 100000;
+            } else {
+               finalPricePerKm = 150000;
+            }
+            console.log(`  💰 [createOrder] Sử dụng pricePerKm mặc định theo trọng lượng (${ton.toFixed(2)} tấn): ${finalPricePerKm}`);
          }
-         console.log(`  ✅ [createOrder] Tìm thấy xe phù hợp:`, {
-            vehicleId: anyVehicle._id,
-            type: anyVehicle.type,
-            maxWeightKg: anyVehicle.maxWeightKg,
-            pricePerKm: anyVehicle.pricePerKm,
-            status: anyVehicle.status
-         });
 
-         // Nếu chưa có pricePerKm, dùng từ xe tìm được (fallback)
-         if (!finalPricePerKm && anyVehicle.pricePerKm > 0) {
-            finalPricePerKm = Number(anyVehicle.pricePerKm);
-            console.log(`  💰 [createOrder] Sử dụng pricePerKm từ xe tìm được (fallback): ${finalPricePerKm}`);
-         }
+         // KHÔNG kiểm tra xe cụ thể nữa - tài xế sẽ tự quyết định có nhận đơn hay không
+         // Đơn hàng sẽ được gửi cho tất cả tài xế online gần, họ sẽ tự filter theo xe của mình
+         console.log(`  ✅ [createOrder] Đã xác định pricePerKm: ${finalPricePerKm} VND/km`);
 
          // Lưu ý: vehicleType được lưu từ request, không phải từ anyVehicle
          // Điều này đảm bảo vehicleType trong đơn hàng khớp với vehicleType mà khách hàng chọn
@@ -262,9 +257,77 @@ export const createOrder = async (req, res) => {
          }))
       });
 
+      // Tìm tài xế gần và gửi đơn cho họ (không tự động gán)
+      if (order.pickupLocation && order.pickupLocation.coordinates && order.pickupLocation.coordinates.length === 2) {
+         console.log('\n🔍 [createOrder] Bắt đầu tìm tài xế gần trong bán kính 2km...');
+         const [pickupLng, pickupLat] = order.pickupLocation.coordinates;
+
+         // Lấy trọng tải yêu cầu từ items (lấy max weightKg trong tất cả items)
+         const maxWeightKg = Math.max(...order.items.map(item => Number(item.weightKg) || 0));
+         console.log(`  ⚖️ [createOrder] Trọng tải yêu cầu: ${maxWeightKg}kg`);
+
+         // Tìm tất cả tài xế online trong bán kính 2km
+         try {
+            const nearbyDrivers = await Driver.find({
+               isOnline: true,
+               status: 'Active',
+               currentLocation: {
+                  $near: {
+                     $geometry: {
+                        type: 'Point',
+                        coordinates: [pickupLng, pickupLat]
+                     },
+                     $maxDistance: 2000 // 2km = 2000 mét
+                  }
+               }
+            });
+
+            console.log(`  📊 [createOrder] Tìm thấy ${nearbyDrivers.length} tài xế online trong bán kính 2km`);
+
+            // Lọc tài xế có xe phù hợp với trọng tải yêu cầu
+            const suitableDrivers = [];
+            for (const driver of nearbyDrivers) {
+               // Tìm tất cả xe của tài xế này
+               const driverVehicles = await Vehicle.find({
+                  driverId: driver._id,
+                  status: 'Active'
+               });
+
+               // Kiểm tra xem có xe nào có maxWeightKg >= weightKg yêu cầu không
+               const hasSuitableVehicle = driverVehicles.some(vehicle => 
+                  vehicle.maxWeightKg && Number(vehicle.maxWeightKg) >= maxWeightKg
+               );
+
+               if (hasSuitableVehicle) {
+                  suitableDrivers.push(driver);
+                  console.log(`  ✅ [createOrder] Tài xế ${driver._id} có xe phù hợp (maxWeightKg >= ${maxWeightKg}kg)`);
+               } else {
+                  console.log(`  ❌ [createOrder] Tài xế ${driver._id} không có xe phù hợp (tất cả xe có maxWeightKg < ${maxWeightKg}kg)`);
+               }
+            }
+
+            console.log(`  🎯 [createOrder] Có ${suitableDrivers.length}/${nearbyDrivers.length} tài xế có xe phù hợp với trọng tải yêu cầu`);
+
+            // Lưu danh sách tài xế phù hợp để emit socket sau
+            // (sẽ được sử dụng ở phần emit socket bên dưới)
+            order.suitableDriverIds = suitableDrivers.map(d => d._id.toString());
+         } catch (locationError) {
+            console.error(`  ❌ [createOrder] Lỗi khi tìm tài xế:`, locationError);
+         }
+      } else {
+         console.log('⚠️ [createOrder] Không có tọa độ điểm đón, vẫn gửi đơn cho tất cả tài xế online');
+      }
+
       // Populate customer để trả về đầy đủ thông tin
       const populatedOrder = await Order.findById(order._id)
-         .populate('customerId', 'name phone email');
+         .populate('customerId', 'name phone email')
+         .populate({
+            path: 'items.driverId',
+            populate: {
+               path: 'userId',
+               select: 'name phone avatarUrl'
+            }
+         });
 
       // Phát tín hiệu realtime cho tài xế: Có đơn mới trong "Đơn có sẵn"
       console.log('\n📡 [createOrder] Chuẩn bị phát tín hiệu Socket.IO...');
@@ -288,8 +351,19 @@ export const createOrder = async (req, res) => {
          };
 
          console.log('📤 [createOrder] Socket payload:', JSON.stringify(socketPayload, null, 2));
-         io.to('drivers').emit('order:available:new', socketPayload);
-         console.log('✅ [createOrder] Đã emit socket event "order:available:new" đến room "drivers"');
+         
+         // Chỉ gửi đơn cho tài xế có xe phù hợp với trọng tải
+         if (order.suitableDriverIds && order.suitableDriverIds.length > 0) {
+            // Emit cho từng tài xế phù hợp qua room riêng
+            for (const driverId of order.suitableDriverIds) {
+               io.to(`driver:${driverId}`).emit('order:available:new', socketPayload);
+            }
+            console.log(`✅ [createOrder] Đã emit socket event "order:available:new" đến ${order.suitableDriverIds.length} tài xế phù hợp`);
+         } else {
+            // Nếu không có tài xế phù hợp (không có tọa độ hoặc lỗi), vẫn emit cho tất cả (fallback)
+            io.to('drivers').emit('order:available:new', socketPayload);
+            console.log('⚠️ [createOrder] Không có tài xế phù hợp, emit cho tất cả tài xế (fallback)');
+         }
          console.log('📡 [Socket] Chi tiết đơn hàng trong socket:', {
             orderId: order._id,
             itemsCount: order.items.length,
@@ -388,6 +462,39 @@ export const acceptOrderItem = async (req, res) => {
          return res.status(400).json({ success: false, message: 'Mục hàng này không thể nhận' });
       }
 
+      // QUAN TRỌNG: Kiểm tra khoảng cách từ tài xế đến điểm đón (phải <= 2km)
+      if (driver.currentLocation && driver.currentLocation.coordinates && 
+          order.pickupLocation && order.pickupLocation.coordinates) {
+         const [driverLng, driverLat] = driver.currentLocation.coordinates;
+         const [pickupLng, pickupLat] = order.pickupLocation.coordinates;
+         
+         // Tính khoảng cách bằng Haversine formula
+         const R = 6371e3; // Bán kính Trái Đất (mét)
+         const φ1 = driverLat * Math.PI / 180;
+         const φ2 = pickupLat * Math.PI / 180;
+         const Δφ = (pickupLat - driverLat) * Math.PI / 180;
+         const Δλ = (pickupLng - driverLng) * Math.PI / 180;
+
+         const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+                   Math.cos(φ1) * Math.cos(φ2) *
+                   Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+         const distance = R * c; // Khoảng cách tính bằng mét
+
+         console.log(`📍 [acceptOrderItem] Khoảng cách từ tài xế đến điểm đón: ${(distance / 1000).toFixed(2)} km`);
+
+         // Chỉ cho phép nhận đơn nếu khoảng cách <= 2km (2000 mét)
+         if (distance > 2000) {
+            console.log(`❌ [acceptOrderItem] Tài xế không thể nhận đơn vì cách xa ${(distance / 1000).toFixed(2)} km (> 2km)`);
+            return res.status(400).json({ 
+               success: false, 
+               message: `Đơn hàng này cách bạn ${(distance / 1000).toFixed(2)} km, vượt quá bán kính 2km. Vui lòng chọn đơn hàng gần hơn.` 
+            });
+         }
+      } else {
+         console.log('⚠️ [acceptOrderItem] Không có vị trí tài xế hoặc tọa độ điểm đón, bỏ qua kiểm tra khoảng cách');
+      }
+
       // Cập nhật thông tin item: gán tài xế và chuyển trạng thái sang "Accepted"
       item.driverId = driver._id;
       item.status = 'Accepted';
@@ -416,6 +523,27 @@ export const acceptOrderItem = async (req, res) => {
          driverId: driver._id,
          orderStatus: updatedOrder.status
       });
+
+      // Gửi socket event cho customer: tài xế đã nhận đơn
+      try {
+         const acceptedItem = updatedOrder.items.find(i => String(i._id) === String(itemId));
+         const customerSocketPayload = {
+            orderId: order._id.toString(),
+            itemId: itemId,
+            driverId: driver._id.toString(),
+            driverName: acceptedItem?.driverId?.userId?.name || 'Tài xế',
+            driverPhone: acceptedItem?.driverId?.userId?.phone || '',
+            driverAvatar: acceptedItem?.driverId?.userId?.avatarUrl || '',
+            status: 'Accepted',
+            acceptedAt: item.acceptedAt
+         };
+
+         // Gửi đến room của customer
+         io.to(`customer:${order.customerId.toString()}`).emit('order:accepted', customerSocketPayload);
+         console.log(`📤 [acceptOrderItem] Đã emit socket event "order:accepted" đến customer ${order.customerId}`);
+      } catch (socketError) {
+         console.error('❌ [acceptOrderItem] Lỗi phát tín hiệu socket:', socketError);
+      }
 
       return res.json({ success: true, data: updatedOrder });
    } catch (error) {
@@ -537,6 +665,22 @@ export const updateOrderItemStatus = async (req, res) => {
 
       // Cập nhật trạng thái tổng của đơn hàng
       await updateOrderStatus(orderId);
+
+      // Gửi socket event cho customer khi tài xế cập nhật trạng thái
+      try {
+         const customerSocketPayload = {
+            orderId: order._id.toString(),
+            itemId: itemId,
+            status: status,
+            updatedAt: new Date()
+         };
+
+         // Gửi đến room của customer
+         io.to(`customer:${order.customerId.toString()}`).emit('order:status:updated', customerSocketPayload);
+         console.log(`📤 [updateOrderItemStatus] Đã emit socket event "order:status:updated" đến customer ${order.customerId}`);
+      } catch (socketError) {
+         console.error('❌ [updateOrderItemStatus] Lỗi phát tín hiệu socket:', socketError);
+      }
 
       console.log(`✅ Cập nhật trạng thái thành công: ${status}`, { orderId, itemId });
       return res.json({ success: true, data: order });
@@ -823,6 +967,39 @@ export const getAvailableOrders = async (req, res) => {
       console.log('\n🔍 [getAvailableOrders] Bắt đầu filter items...');
       const filteredOrders = [];
 
+      // Kiểm tra vị trí hiện tại của tài xế
+      const driverLocation = driver.currentLocation;
+      const hasDriverLocation = driverLocation && 
+                                driverLocation.coordinates && 
+                                driverLocation.coordinates.length === 2 &&
+                                driverLocation.coordinates[0] !== 0 && 
+                                driverLocation.coordinates[1] !== 0;
+
+      if (hasDriverLocation) {
+         console.log('📍 [getAvailableOrders] Tài xế có vị trí hiện tại:', {
+            coordinates: driverLocation.coordinates,
+            locationUpdatedAt: driver.locationUpdatedAt
+         });
+      } else {
+         console.log('⚠️ [getAvailableOrders] Tài xế chưa có vị trí hiện tại, sắp xếp theo thời gian tạo');
+      }
+
+      // Hàm tính khoảng cách giữa 2 điểm (Haversine formula)
+      const calculateDistance = (lat1, lon1, lat2, lon2) => {
+         const R = 6371e3; // Bán kính Trái Đất (mét)
+         const φ1 = lat1 * Math.PI / 180;
+         const φ2 = lat2 * Math.PI / 180;
+         const Δφ = (lat2 - lat1) * Math.PI / 180;
+         const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+         const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+                   Math.cos(φ1) * Math.cos(φ2) *
+                   Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+         return R * c; // Khoảng cách tính bằng mét
+      };
+
       for (let orderIdx = 0; orderIdx < allOrders.length; orderIdx++) {
          const order = allOrders[orderIdx];
          try {
@@ -836,15 +1013,22 @@ export const getAvailableOrders = async (req, res) => {
                const isCreated = item.status === 'Created';
                const hasNoDriver = !item.driverId || item.driverId === null || String(item.driverId) === 'null';
 
-               // So sánh vehicleType: Xe lớn hơn có thể nhận đơn của xe nhỏ hơn
-               const itemVehicleType = String(item.vehicleType || '').trim();
+               // So sánh vehicleType: Nếu item không có vehicleType (null), chỉ cần kiểm tra trọng tải
+               const itemVehicleType = item.vehicleType ? String(item.vehicleType).trim() : null;
                const driverVehicleType = String(vehicle.type || '').trim();
-               const matchesVehicle = canVehicleAcceptOrderType(itemVehicleType, driverVehicleType);
+               
+               // Nếu item không có vehicleType (theo luồng mới), chỉ cần kiểm tra trọng tải
+               let matchesVehicle = true; // Mặc định true nếu không có vehicleType
+               if (itemVehicleType) {
+                  // Nếu có vehicleType, kiểm tra theo hierarchy
+                  matchesVehicle = canVehicleAcceptOrderType(itemVehicleType, driverVehicleType);
+               }
 
                // So sánh weight (chuyển về number để so sánh chính xác)
+               // QUAN TRỌNG: vehicleMaxWeight phải >= itemWeight (xe phải chở được hàng)
                const itemWeight = Number(item.weightKg) || 0;
                const vehicleMaxWeight = Number(vehicle.maxWeightKg) || 0;
-               const matchesWeight = itemWeight > 0 && vehicleMaxWeight > 0 && itemWeight <= vehicleMaxWeight;
+               const matchesWeight = itemWeight > 0 && vehicleMaxWeight > 0 && vehicleMaxWeight >= itemWeight;
 
                const canAccept = isCreated && hasNoDriver && matchesVehicle && matchesWeight;
 
@@ -916,16 +1100,54 @@ export const getAvailableOrders = async (req, res) => {
             // Convert order to plain object safely
             const orderObj = order.toObject ? order.toObject() : order;
 
+            // Tính khoảng cách từ tài xế đến điểm đón (nếu có)
+            let distanceFromDriver = null;
+            if (hasDriverLocation && order.pickupLocation && order.pickupLocation.coordinates) {
+               const [pickupLng, pickupLat] = order.pickupLocation.coordinates;
+               const [driverLng, driverLat] = driverLocation.coordinates;
+               distanceFromDriver = calculateDistance(driverLat, driverLng, pickupLat, pickupLng);
+               console.log(`    📍 [getAvailableOrders] Khoảng cách từ tài xế đến điểm đón: ${(distanceFromDriver / 1000).toFixed(2)} km`);
+               
+               // QUAN TRỌNG: Chỉ hiển thị đơn hàng trong bán kính 2km (2000 mét)
+               if (distanceFromDriver > 2000) {
+                  console.log(`    ❌ [getAvailableOrders] Đơn ${orderIdx + 1} cách xa ${(distanceFromDriver / 1000).toFixed(2)} km (> 2km), bỏ qua`);
+                  continue; // Bỏ qua đơn hàng này
+               }
+            } else {
+               // Nếu không có vị trí tài xế hoặc không có tọa độ điểm đón, vẫn hiển thị (fallback)
+               console.log(`    ⚠️ [getAvailableOrders] Không có vị trí để tính khoảng cách, vẫn hiển thị đơn`);
+            }
+
             filteredOrders.push({
                ...orderObj,
-               items: itemsWithCorrectPrice // Chỉ trả về items có thể nhận với giá đã tính lại
+               items: itemsWithCorrectPrice, // Chỉ trả về items có thể nhận với giá đã tính lại
+               distanceFromDriver: distanceFromDriver ? Math.round(distanceFromDriver) : null // Khoảng cách tính bằng mét
             });
-            console.log(`    ✅ Đơn ${orderIdx + 1}: Đã thêm vào danh sách filteredOrders với ${itemsWithCorrectPrice.length} items`);
+            console.log(`    ✅ Đơn ${orderIdx + 1}: Đã thêm vào danh sách filteredOrders với ${itemsWithCorrectPrice.length} items (khoảng cách: ${distanceFromDriver ? (distanceFromDriver / 1000).toFixed(2) + ' km' : 'N/A'})`);
          } catch (orderError) {
             console.error(`❌ [getAvailableOrders] Lỗi xử lý đơn ${order._id}:`, orderError);
             // Bỏ qua đơn lỗi, tiếp tục với đơn khác
             continue;
          }
+      }
+
+      // Sắp xếp đơn hàng theo khoảng cách (nếu có vị trí tài xế)
+      if (hasDriverLocation) {
+         filteredOrders.sort((a, b) => {
+            // Ưu tiên đơn có khoảng cách (gần hơn)
+            if (a.distanceFromDriver !== null && b.distanceFromDriver !== null) {
+               return a.distanceFromDriver - b.distanceFromDriver;
+            }
+            // Đơn có khoảng cách luôn ưu tiên hơn đơn không có
+            if (a.distanceFromDriver !== null) return -1;
+            if (b.distanceFromDriver !== null) return 1;
+            // Nếu cả 2 đều không có khoảng cách, sắp xếp theo thời gian tạo
+            return new Date(b.createdAt) - new Date(a.createdAt);
+         });
+         console.log('📍 [getAvailableOrders] Đã sắp xếp đơn hàng theo khoảng cách từ vị trí tài xế');
+      } else {
+         // Nếu không có vị trí, giữ nguyên sắp xếp theo thời gian tạo
+         console.log('⚠️ [getAvailableOrders] Không có vị trí tài xế, sắp xếp theo thời gian tạo');
       }
 
       console.log(`\n✅ [getAvailableOrders] ========== KẾT QUẢ FILTER ==========`);
@@ -934,10 +1156,12 @@ export const getAvailableOrders = async (req, res) => {
          filteredOrdersCount: filteredOrders.length,
          driverVehicleType: vehicle.type,
          driverMaxWeight: vehicle.maxWeightKg,
+         hasDriverLocation: hasDriverLocation,
          orders: filteredOrders.map(o => ({
             orderId: o._id,
             customerName: o.customerId?.name,
             itemsCount: o.items.length,
+            distanceFromDriver: o.distanceFromDriver ? `${(o.distanceFromDriver / 1000).toFixed(2)} km` : 'N/A',
             items: o.items.map(i => ({
                id: i._id,
                vehicleType: i.vehicleType,

@@ -12,11 +12,20 @@ const driverSchema = new mongoose.Schema({
    lastOnlineAt: { type: Date },
    avatarUrl: { type: String },
    serviceAreas: { type: [String], default: [] }, // Danh sách quận/huyện hoạt động
+   // Vị trí hiện tại của tài xế (GeoJSON Point)
+   currentLocation: {
+      type: { type: String, enum: ['Point'], default: 'Point' },
+      coordinates: { type: [Number], default: [0, 0] } // [longitude, latitude]
+   },
+   locationUpdatedAt: { type: Date }, // Thời gian cập nhật vị trí lần cuối
    // Thông tin ngân hàng để nhận tiền
    bankAccountName: { type: String },
    bankAccountNumber: { type: String },
    bankName: { type: String },
    bankCode: { type: String }
 }, { timestamps: true });
+
+// Index để tìm kiếm theo vị trí (GeoJSON 2dsphere)
+driverSchema.index({ currentLocation: '2dsphere' });
 
 export default mongoose.model("Driver", driverSchema);

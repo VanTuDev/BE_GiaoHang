@@ -5,7 +5,7 @@ import mongoose from "mongoose";
  * Lưu lại trạng thái theo từng bước xử lý và các mốc thời gian quan trọng.
  */
 const orderItemSchema = new mongoose.Schema({
-   vehicleType: { type: String, required: true },
+   vehicleType: { type: String, required: false }, // Cho phép null (theo luồng mới không cần chọn loại xe cụ thể)
    weightKg: { type: Number, required: true },
    distanceKm: { type: Number, required: true },
    loadingService: { type: Boolean, default: false },

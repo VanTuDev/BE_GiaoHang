@@ -30,11 +30,19 @@ export const io = new SocketIOServer(server, {
 io.on('connection', (socket) => {
    // Driver join để nhận đơn có sẵn
    socket.on('driver:join', (driverId) => {
-      socket.join('drivers');
+      socket.join('drivers'); // Join room chung
+      socket.join(`driver:${driverId}`); // Join room riêng để nhận đơn phù hợp
+      console.log(`✅ Driver ${driverId} đã join room "drivers" và "driver:${driverId}"`);
+   });
+
+   // Customer join để nhận updates về đơn hàng
+   socket.on('customer:join', (customerId) => {
+      socket.join(`customer:${customerId}`);
+      console.log(`✅ Customer ${customerId} đã join room "customer:${customerId}"`);
    });
 
    socket.on('disconnect', () => {
-      // noop
+      console.log('❌ Client đã disconnect');
    });
 });
 

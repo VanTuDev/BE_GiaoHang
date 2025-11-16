@@ -166,3 +166,50 @@ export const updateDriverBankInfo = async (req, res) => {
       return res.status(500).json({ success: false, message: 'Lỗi khi cập nhật thông tin ngân hàng', error: error.message });
    }
 };
+
+// Cập nhật vị trí hiện tại của tài xế
+export const updateDriverLocation = async (req, res) => {
+   try {
+      const userId = req.user._id;
+      const { latitude, longitude } = req.body;
+
+      // Validate tọa độ
+      if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+         return res.status(400).json({ success: false, message: 'Tọa độ không hợp lệ' });
+      }
+
+      if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+         return res.status(400).json({ success: false, message: 'Tọa độ nằm ngoài phạm vi hợp lệ' });
+      }
+
+      // Cập nhật vị trí (GeoJSON format: [longitude, latitude])
+      const updatedDriver = await Driver.findOneAndUpdate(
+         { userId },
+         {
+            $set: {
+               currentLocation: {
+                  type: 'Point',
+                  coordinates: [longitude, latitude]
+               },
+               locationUpdatedAt: new Date()
+            }
+         },
+         { new: true }
+      );
+
+      if (!updatedDriver) {
+         return res.status(404).json({ success: false, message: 'Không tìm thấy thông tin tài xế' });
+      }
+
+      return res.json({
+         success: true,
+         data: {
+            currentLocation: updatedDriver.currentLocation,
+            locationUpdatedAt: updatedDriver.locationUpdatedAt
+         },
+         message: 'Cập nhật vị trí thành công'
+      });
+   } catch (error) {
+      return res.status(500).json({ success: false, message: 'Lỗi khi cập nhật vị trí', error: error.message });
+   }
+};
