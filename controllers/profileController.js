@@ -1,3 +1,4 @@
+import bcrypt from 'bcrypt';
 import User from '../models/user.model.js';
 import Driver from '../models/driver.model.js';
 import cloudinary from '../config/cloudinary.js';
@@ -211,5 +212,42 @@ export const updateDriverLocation = async (req, res) => {
       });
    } catch (error) {
       return res.status(500).json({ success: false, message: 'Lỗi khi cập nhật vị trí', error: error.message });
+   }
+};
+
+// Đổi mật khẩu (cho Customer và Driver)
+export const changePassword = async (req, res) => {
+   try {
+      const userId = req.user._id;
+      const { currentPassword, newPassword } = req.body;
+
+      // Kiểm tra dữ liệu đầu vào
+      if (!currentPassword || !newPassword) {
+         return res.status(400).json({ success: false, message: 'Vui lòng nhập mật khẩu hiện tại và mật khẩu mới' });
+      }
+
+      if (newPassword.length < 6) {
+         return res.status(400).json({ success: false, message: 'Mật khẩu mới phải có ít nhất 6 ký tự' });
+      }
+
+      // Lấy thông tin user
+      const user = await User.findById(userId);
+      if (!user) {
+         return res.status(404).json({ success: false, message: 'Không tìm thấy người dùng' });
+      }
+
+      // Kiểm tra mật khẩu hiện tại
+      const isMatch = await bcrypt.compare(currentPassword, user.passwordHash);
+      if (!isMatch) {
+         return res.status(400).json({ success: false, message: 'Mật khẩu hiện tại không đúng' });
+      }
+
+      // Cập nhật mật khẩu mới
+      const passwordHash = await bcrypt.hash(newPassword, 10);
+      await User.findByIdAndUpdate(userId, { passwordHash });
+
+      return res.json({ success: true, message: 'Đổi mật khẩu thành công' });
+   } catch (error) {
+      return res.status(500).json({ success: false, message: 'Lỗi khi đổi mật khẩu', error: error.message });
    }
 };

@@ -28,7 +28,14 @@ const orderItemSchema = new mongoose.Schema({
    deliveredAt: { type: Date },
    cancelledAt: { type: Date },
    cancelReason: { type: String },
-   itemPhotos: [String]
+   itemPhotos: [String],
+   // Track tài xế đã được gửi đơn và đã từ chối
+   offeredToDrivers: [{
+      driverId: { type: mongoose.Schema.Types.ObjectId, ref: "Driver" },
+      offeredAt: { type: Date, default: Date.now },
+      status: { type: String, enum: ["pending", "accepted", "rejected"], default: "pending" },
+      rejectedAt: { type: Date }
+   }]
 }, { _id: true, timestamps: true });
 
 // Đơn hàng gồm nhiều item, mỗi item có thể do tài xế khác nhau phụ trách.

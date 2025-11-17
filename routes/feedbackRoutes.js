@@ -7,7 +7,8 @@ import {
    getOrderFeedbacks,
    getAllFeedbacks,
    updateFeedbackStatus,
-   respondToFeedback
+   respondToFeedback,
+   deleteFeedback
 } from '../controllers/feedbackController.js';
 
 const router = express.Router();
@@ -32,5 +33,8 @@ router.put('/admin/:feedbackId/status', authenticate, authorize(roles.ADMIN), up
 
 // Driver: Phản hồi đánh giá
 router.put('/:feedbackId/respond', authenticate, authorize(roles.DRIVER), respondToFeedback);
+
+// Customer: Xóa đánh giá của mình
+router.delete('/:feedbackId', authenticate, authorize(roles.CUSTOMER), deleteFeedback);
 
 export default router;

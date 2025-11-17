@@ -10,7 +10,8 @@ import {
    getOrderDetail,
    getAvailableOrders,
    cancelOrder,
-   updateOrderInsurance
+   updateOrderInsurance,
+   rejectOrderItem
 } from '../controllers/orderController.js';
 
 const router = express.Router();
@@ -38,6 +39,9 @@ router.get('/driver/available', authenticate, authorize(roles.DRIVER), getAvaila
 
 // Driver: Nhận đơn hàng
 router.put('/:orderId/items/:itemId/accept', authenticate, authorize(roles.DRIVER), acceptOrderItem);
+
+// Driver: Từ chối đơn hàng
+router.put('/:orderId/items/:itemId/reject', authenticate, authorize(roles.DRIVER), rejectOrderItem);
 
 // Driver cập nhật trạng thái item
 router.put('/:orderId/items/:itemId/status', authenticate, authorize(roles.DRIVER), updateOrderItemStatus);

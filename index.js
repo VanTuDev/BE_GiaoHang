@@ -28,11 +28,24 @@ export const io = new SocketIOServer(server, {
 });
 
 io.on('connection', (socket) => {
+   console.log(`🔌 [Socket] Client connected: ${socket.id}`);
+   
    // Driver join để nhận đơn có sẵn
    socket.on('driver:join', (driverId) => {
+      if (!driverId) {
+         console.warn(`⚠️ [Socket] driver:join được gọi nhưng không có driverId`);
+         return;
+      }
+      
       socket.join('drivers'); // Join room chung
       socket.join(`driver:${driverId}`); // Join room riêng để nhận đơn phù hợp
-      console.log(`✅ Driver ${driverId} đã join room "drivers" và "driver:${driverId}"`);
+      
+      // Kiểm tra số lượng client trong room
+      const driverRoom = `driver:${driverId}`;
+      const room = io.sockets.adapter.rooms.get(driverRoom);
+      const clientCount = room ? room.size : 0;
+      
+      console.log(`✅ [Socket] Driver ${driverId} đã join room "drivers" và "${driverRoom}" (${clientCount} client(s) trong room)`);
    });
 
    // Customer join để nhận updates về đơn hàng
