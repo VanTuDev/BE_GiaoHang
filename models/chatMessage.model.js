@@ -58,3 +58,14 @@ chatMessageSchema.index({ customerId: 1, createdAt: -1 });
 
 export default mongoose.model('ChatMessage', chatMessageSchema);
 
+
+
+
+
+
+
+
+
+
+
+

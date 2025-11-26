@@ -5,11 +5,36 @@ import cloudinary from '../config/cloudinary.js';
 import { sendDriverApprovedEmail } from '../utils/emailService.js';
 
 const uploadStream = (buffer, folder) => new Promise((resolve, reject) => {
-   const s = cloudinary.uploader.upload_stream({ folder }, (err, result) => err ? reject(err) : resolve(result));
-   s.end(buffer);
+   if (!buffer || !Buffer.isBuffer(buffer)) {
+      return reject(new Error('Invalid buffer provided'));
+   }
+   try {
+      const s = cloudinary.uploader.upload_stream(
+         { folder, resource_type: 'auto' },
+         (err, result) => {
+            if (err) {
+               console.error('❌ [uploadStream] Cloudinary error:', err);
+               return reject(err);
+            }
+            if (!result || !result.secure_url) {
+               return reject(new Error('Upload failed: no secure_url returned'));
+            }
+            resolve(result);
+         }
+      );
+      s.on('error', (err) => {
+         console.error('❌ [uploadStream] Stream error:', err);
+         reject(err);
+      });
+      s.end(buffer);
+   } catch (err) {
+      console.error('❌ [uploadStream] Exception:', err);
+      reject(err);
+   }
 });
 
 export const applyDriver = async (req, res) => {
+   let uploaded = {};
    try {
       const userId = req.user._id;
       const user = await User.findById(userId);
@@ -18,21 +43,36 @@ export const applyDriver = async (req, res) => {
 
       // Upload các file tuỳ có
       const files = req.files || {};
-      const uploaded = {};
-      const tasks = [];
+      uploaded = {};
       const mapSingle = async (key, folder) => {
-         if (files[key]?.[0]) {
-            const r = await uploadStream(files[key][0].buffer, folder);
-            uploaded[key] = r.secure_url;
+         try {
+            if (files[key]?.[0] && files[key][0].buffer) {
+               const r = await uploadStream(files[key][0].buffer, folder);
+               if (r && r.secure_url) {
+                  uploaded[key] = r.secure_url;
+               }
+            }
+         } catch (err) {
+            console.error(`❌ [applyDriver] Lỗi upload ${key}:`, err.message);
+            throw new Error(`Lỗi upload file ${key}: ${err.message}`);
          }
       };
       const mapArray = async (key, folder) => {
-         if (files[key]) {
-            uploaded[key] = [];
-            for (const f of files[key]) {
-               const r = await uploadStream(f.buffer, folder);
-               uploaded[key].push(r.secure_url);
+         try {
+            if (files[key] && Array.isArray(files[key]) && files[key].length > 0) {
+               uploaded[key] = [];
+               for (const f of files[key]) {
+                  if (f && f.buffer) {
+                     const r = await uploadStream(f.buffer, folder);
+                     if (r && r.secure_url) {
+                        uploaded[key].push(r.secure_url);
+                     }
+                  }
+               }
             }
+         } catch (err) {
+            console.error(`❌ [applyDriver] Lỗi upload ${key}:`, err.message);
+            throw new Error(`Lỗi upload files ${key}: ${err.message}`);
          }
       };
 
@@ -44,27 +84,71 @@ export const applyDriver = async (req, res) => {
       await mapArray('vehiclePhotos', 'onboarding/vehicle');
       await mapArray('vehicleDocs', 'onboarding/vehicledocs');
 
-      const app = await DriverApplication.findOneAndUpdate(
-         { userId },
-         {
-            $set: {
-               status: 'Pending', docs: {
-                  licenseFrontUrl: uploaded.licenseFront,
-                  licenseBackUrl: uploaded.licenseBack,
-                  idCardFrontUrl: uploaded.idFront,
-                  idCardBackUrl: uploaded.idBack,
-                  portraitUrl: uploaded.portrait,
-                  vehiclePhotos: uploaded.vehiclePhotos,
-                  vehicleDocs: uploaded.vehicleDocs
-               }, submittedAt: new Date()
-            }
-         },
-         { upsert: true, new: true }
-      );
+      // Chuẩn bị docs object, chỉ set các field có giá trị (không set undefined)
+      const docsUpdate = {};
+      if (uploaded.licenseFront) docsUpdate.licenseFrontUrl = uploaded.licenseFront;
+      if (uploaded.licenseBack) docsUpdate.licenseBackUrl = uploaded.licenseBack;
+      if (uploaded.idFront) docsUpdate.idCardFrontUrl = uploaded.idFront;
+      if (uploaded.idBack) docsUpdate.idCardBackUrl = uploaded.idBack;
+      if (uploaded.portrait) docsUpdate.portraitUrl = uploaded.portrait;
+      if (uploaded.vehiclePhotos && Array.isArray(uploaded.vehiclePhotos) && uploaded.vehiclePhotos.length > 0) {
+         docsUpdate.vehiclePhotos = uploaded.vehiclePhotos;
+      }
+      if (uploaded.vehicleDocs && Array.isArray(uploaded.vehicleDocs) && uploaded.vehicleDocs.length > 0) {
+         docsUpdate.vehicleDocs = uploaded.vehicleDocs;
+      }
 
-      return res.status(201).json({ success: true, data: app });
+      // Kiểm tra xem có file nào được upload không
+      if (Object.keys(uploaded).length === 0) {
+         return res.status(400).json({ 
+            success: false, 
+            message: 'Vui lòng upload ít nhất một file để nộp hồ sơ' 
+         });
+      }
+
+      // Xây dựng update object, dùng dot notation để merge với docs cũ (nếu có)
+      const updateData = {
+         status: 'Pending',
+         submittedAt: new Date()
+      };
+
+      // Dùng dot notation để merge từng field vào docs, không replace toàn bộ object
+      if (Object.keys(docsUpdate).length > 0) {
+         Object.keys(docsUpdate).forEach(key => {
+            updateData[`docs.${key}`] = docsUpdate[key];
+         });
+      }
+
+      try {
+         const app = await DriverApplication.findOneAndUpdate(
+            { userId },
+            { $set: updateData },
+            { upsert: true, new: true }
+         );
+         
+         if (!app) {
+            throw new Error('Failed to create or update application');
+         }
+         
+         return res.status(201).json({ success: true, data: app });
+      } catch (dbError) {
+         console.error('❌ [applyDriver] Database error:', dbError);
+         throw new Error(`Database error: ${dbError.message}`);
+      }
    } catch (error) {
-      return res.status(500).json({ success: false, message: 'Lỗi nộp hồ sơ tài xế', error: error.message });
+      console.error('❌ [applyDriver] Lỗi khi nộp hồ sơ tài xế:', {
+         userId: req.user?._id,
+         error: error.message,
+         stack: error.stack,
+         filesReceived: Object.keys(req.files || {}),
+         uploaded: Object.keys(uploaded || {})
+      });
+      return res.status(500).json({ 
+         success: false, 
+         message: 'Lỗi nộp hồ sơ tài xế', 
+         error: error.message,
+         details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
    }
 };
 

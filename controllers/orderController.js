@@ -6,6 +6,8 @@ import DriverTransaction from '../models/driverTransaction.model.js';
 import { calcOrderPrice } from '../utils/pricing.js';
 import { io } from '../index.js';
 
+const ACTIVE_ITEM_STATUSES = ['Accepted', 'PickedUp', 'Delivering'];
+
 /**
  * HÀM HELPER: Kiểm tra xe của tài xế có thể nhận đơn của loại xe yêu cầu không
  * Logic: Xe lớn hơn có thể nhận đơn của xe nhỏ hơn
@@ -84,6 +86,30 @@ export const createOrder = async (req, res) => {
       if (!Array.isArray(items) || items.length === 0) {
          console.log('❌ [createOrder] Validation failed: Thiếu danh sách items');
          return res.status(400).json({ success: false, message: 'Thiếu danh sách items' });
+      }
+
+      // Không cho phép tạo đơn mới khi đang có đơn được tài xế giao
+      const blockingOrder = await Order.findOne({
+         customerId: req.user._id,
+         $or: [
+            { status: 'InProgress' },
+            { 'items.status': { $in: ACTIVE_ITEM_STATUSES } }
+         ]
+      }).select('_id status pickupAddress dropoffAddress createdAt');
+
+      if (blockingOrder) {
+         console.log('❌ [createOrder] Khách hàng đang có đơn hoạt động:', {
+            orderId: blockingOrder._id,
+            status: blockingOrder.status
+         });
+         return res.status(400).json({
+            success: false,
+            message: 'Bạn đang có đơn hàng được tài xế giao. Vui lòng hoàn thành hoặc hủy đơn đó trước khi tạo đơn mới.',
+            data: {
+               orderId: blockingOrder._id,
+               status: blockingOrder.status
+            }
+         });
       }
 
       const mapped = [];
